@@ -1,0 +1,393 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input AddToCartInput {
+  color: String
+  productId: ID!
+  quantity: Int! = 1
+  size: String
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type Brand {
+  createdAt: DateTime!
+  id: ID!
+  logo: String
+  name: String!
+  slug: String!
+  updatedAt: DateTime!
+}
+
+type CartItem {
+  color: String
+  createdAt: DateTime!
+  id: ID!
+  product: Product
+  productId: ID!
+  quantity: Int!
+  size: String
+}
+
+type Category {
+  createdAt: DateTime!
+  description: String
+  id: ID!
+  image: String
+  isActive: Boolean!
+  name: String!
+  nameRu: String
+  slug: String!
+  updatedAt: DateTime!
+}
+
+input CreateBrandInput {
+  logo: String
+  name: String!
+}
+
+input CreateCategoryInput {
+  description: String
+  image: String
+  name: String!
+  nameRu: String
+}
+
+input CreateOrderInput {
+  deliveryAddress: String!
+  deliveryCity: String
+  note: String
+  paymentMethod: PaymentMethod! = CASH
+  phone: String!
+}
+
+input CreateProductInput {
+  brandId: ID
+  categoryId: ID!
+  colors: [String!]! = []
+  description: String
+  descriptionRu: String
+  discountPercent: Int
+  images: [String!]! = []
+  isFeatured: Boolean! = false
+  oldPrice: Float
+  price: Float!
+  sizes: [String!]! = []
+  sku: String!
+  stock: Int! = 0
+  title: String!
+  titleRu: String
+  variants: [VariantInput!]
+}
+
+type DashboardStats {
+  bestSellers: [Product!]!
+  cancelledOrders: Int!
+  deliveredOrders: Int!
+  lowStockProducts: [Product!]!
+  onlineUsers: Int!
+  pendingOrders: Int!
+  processingOrders: Int!
+  recentOrders: [Order!]!
+  revenueToday: Float!
+  revenueTotal: Float!
+  shippedOrders: Int!
+  totalOrders: Int!
+  totalProducts: Int!
+  totalUsers: Int!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Mutation {
+  addToCart(input: AddToCartInput!): CartItem!
+  clearCart: Boolean!
+  createBrand(input: CreateBrandInput!): Brand!
+  createCategory(input: CreateCategoryInput!): Category!
+  createOrder(input: CreateOrderInput!): Order!
+  createProduct(input: CreateProductInput!): Product!
+  initiatePayment(method: PaymentMethod!, orderId: ID!): PaymentUrlResult!
+  login(input: LoginInput!): AuthPayload!
+  refreshToken(refreshToken: String!): AuthPayload!
+  register(input: RegisterInput!): AuthPayload!
+  removeBrand(id: ID!): Boolean!
+  removeCartItem(id: ID!): Boolean!
+  removeCategory(id: ID!): Boolean!
+  removeProduct(id: ID!): Boolean!
+  removeWishlistItem(id: ID!): Boolean!
+  setOrderPaymentStatus(orderId: ID!, paid: Boolean!): Order!
+  toggleWishlist(productId: ID!): ToggleWishlistResult!
+  updateBrand(id: ID!, input: UpdateBrandInput!): Brand!
+  updateCartItem(input: UpdateCartItemInput!): CartItem!
+  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+  updateOrderStatus(input: UpdateOrderStatusInput!): Order!
+  updateProduct(id: ID!, input: UpdateProductInput!): Product!
+  updateProfile(input: UpdateProfileInput!): User!
+}
+
+type Order {
+  createdAt: DateTime!
+  deliveryAddress: String!
+  deliveryCity: String
+  id: ID!
+  items: [OrderItem!]!
+  note: String
+  orderNumber: String!
+  paymentMethod: PaymentMethod!
+  paymentStatus: PaymentStatus!
+  phone: String!
+  status: OrderStatus!
+  totalAmount: Float!
+  updatedAt: DateTime!
+  user: User
+  userId: ID!
+}
+
+input OrderFilterInput {
+  limit: Int! = 20
+  page: Int! = 1
+  paymentStatus: PaymentStatus
+  status: OrderStatus
+}
+
+type OrderItem {
+  color: String
+  id: ID!
+  price: Float!
+  product: Product
+  productId: ID!
+  quantity: Int!
+  size: String
+  title: String!
+}
+
+enum OrderStatus {
+  CANCELLED
+  DELIVERED
+  PENDING
+  PROCESSING
+  SHIPPED
+}
+
+type PaginatedOrders {
+  list: [Order!]!
+  total: Int!
+}
+
+type PaginatedProducts {
+  list: [Product!]!
+  total: Int!
+}
+
+type PaginatedUsers {
+  list: [User!]!
+  total: Int!
+}
+
+enum PaymentMethod {
+  CASH
+  CLICK
+  PAYME
+}
+
+enum PaymentStatus {
+  FAILED
+  PAID
+  PENDING
+}
+
+type PaymentUrlResult {
+  payUrl: String!
+}
+
+type Product {
+  brand: Brand
+  brandId: ID
+  category: Category
+  categoryId: ID!
+  colors: [String!]!
+  createdAt: DateTime!
+  description: String
+  descriptionRu: String
+  discountPercent: Int
+  id: ID!
+  images: [String!]!
+  isActive: Boolean!
+  isFeatured: Boolean!
+  oldPrice: Float
+  price: Float!
+  rating: Float!
+  reviewsCount: Int!
+  sizes: [String!]!
+  sku: String!
+  slug: String!
+  soldCount: Int!
+  stock: Int!
+  title: String!
+  titleRu: String
+  updatedAt: DateTime!
+  variants: [ProductVariant!]!
+  viewCount: Int!
+}
+
+input ProductFilterInput {
+  brandSlug: String
+  categorySlug: String
+  colors: [String!]
+  limit: Int! = 12
+  maxPrice: Float
+  minPrice: Float
+  onlyFeatured: Boolean
+  page: Int! = 1
+  search: String
+  sizes: [String!]
+  sort: ProductSort! = NEWEST
+}
+
+enum ProductSort {
+  MOST_POPULAR
+  NEWEST
+  PRICE_ASC
+  PRICE_DESC
+  TOP_RATED
+}
+
+type ProductVariant {
+  color: String!
+  id: ID!
+  size: String!
+  stock: Int!
+}
+
+type Query {
+  adminStats: DashboardStats!
+  allOrders(filter: OrderFilterInput!): PaginatedOrders!
+  bestSellers(limit: Float): [Product!]!
+  brands: [Brand!]!
+  categories: [Category!]!
+  category(slug: String!): Category!
+  lowStockProducts(threshold: Float): [Product!]!
+  me: User!
+  myCart: [CartItem!]!
+  myOrders: [Order!]!
+  myWishlist: [WishlistItem!]!
+  order(id: ID!): Order!
+  product(slug: String!): Product!
+  products(filter: ProductFilterInput!): PaginatedProducts!
+  users(filter: UsersFilterInput!): PaginatedUsers!
+}
+
+input RegisterInput {
+  email: String!
+  firstName: String!
+  lastName: String
+  password: String!
+  phone: String
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+type ToggleWishlistResult {
+  added: Boolean!
+  item: WishlistItem
+}
+
+input UpdateBrandInput {
+  logo: String
+  name: String
+}
+
+input UpdateCartItemInput {
+  id: ID!
+  quantity: Int!
+}
+
+input UpdateCategoryInput {
+  description: String
+  image: String
+  isActive: Boolean
+  name: String
+  nameRu: String
+}
+
+input UpdateOrderStatusInput {
+  orderId: ID!
+  status: OrderStatus!
+}
+
+input UpdateProductInput {
+  brandId: ID
+  categoryId: ID
+  colors: [String!] = []
+  description: String
+  descriptionRu: String
+  discountPercent: Int
+  images: [String!] = []
+  isActive: Boolean
+  isFeatured: Boolean = false
+  oldPrice: Float
+  price: Float
+  sizes: [String!] = []
+  sku: String
+  stock: Int = 0
+  title: String
+  titleRu: String
+  variants: [VariantInput!]
+}
+
+input UpdateProfileInput {
+  avatar: String
+  firstName: String
+  lastName: String
+  phone: String
+}
+
+type User {
+  avatar: String
+  createdAt: DateTime!
+  email: String!
+  firstName: String!
+  id: ID!
+  isActive: Boolean!
+  lastName: String
+  lastSeenAt: DateTime
+  phone: String
+  role: Role!
+  updatedAt: DateTime!
+}
+
+input UsersFilterInput {
+  limit: Int! = 20
+  page: Int! = 1
+  role: Role
+  search: String
+}
+
+input VariantInput {
+  color: String!
+  size: String!
+  stock: Int!
+}
+
+type WishlistItem {
+  createdAt: DateTime!
+  id: ID!
+  product: Product
+  productId: ID!
+}

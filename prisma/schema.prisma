@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Using SQLite for local development: zero setup, no account/signup, no
+// server to install — the database is just a file (prisma/dev.db) created
+// automatically by `prisma migrate dev`. To move to PostgreSQL later
+// (e.g. for production): change provider to "postgresql", set DATABASE_URL
+// to a real connection string, and re-run `prisma migrate dev`. At that
+// point you can also switch the "string" workaround fields below
+// (roles/statuses, sizes/colors/images, rawPayload) back to native
+// `enum` and `Json`/`String[]` types, since Postgres supports both —
+// SQLite's Prisma connector does not support either, which is why this
+// schema uses plain strings everywhere instead.
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────
+// Models
+//
+// Role / OrderStatus / PaymentMethod / PaymentStatus are NOT Prisma enums
+// here (SQLite's connector doesn't support `enum`) — they're plain String
+// columns. The actual enum types (with validation) live in
+// src/common/enums/*.enum.ts and are what GraphQL and class-validator use;
+// Prisma just stores whatever string value those enums produce.
+// ──────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  phone        String?   @unique
+  passwordHash String
+  firstName    String
+  lastName     String?
+  avatar       String?
+  role         String    @default("USER")
+  isActive     Boolean   @default(true)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  orders        Order[]
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+
+  @@map("users")
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  nameRu      String?
+  slug        String   @unique
+  description String?
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  logo      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  title           String
+  titleRu         String?
+  slug            String   @unique
+  description     String?
+  descriptionRu   String?
+  sku             String   @unique
+  price           Float
+  oldPrice        Float?
+  discountPercent Int?
+  stock           Int      @default(0)
+  // JSON-encoded string arrays, e.g. ["S","M","L"] — see product.service.ts
+  // for the serialize/deserialize helpers (SQLite has no native array/Json type).
+  sizes           String   @default("[]")
+  colors          String   @default("[]")
+  images          String   @default("[]")
+  isActive        Boolean  @default(true)
+  isFeatured      Boolean  @default(false)
+  rating          Float    @default(0)
+  reviewsCount    Int      @default(0)
+  viewCount       Int      @default(0)
+  soldCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  brandId String?
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+  orderItems    OrderItem[]
+  variants      ProductVariant[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@map("products")
+}
+
+// Stock tracked per size+color combination (e.g. "M / Qora" might have 3
+// left while "M / Oq" has 0). `Product.stock` stays as an aggregate total
+// (kept in sync in product.service.ts) so existing dashboard/low-stock
+// code that only reads Product.stock keeps working unchanged; this table
+// is the source of truth for "is this specific size+color available".
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String
+  color     String
+  stock     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, size, color])
+  @@map("product_variants")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String?
+  color     String?
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId, size, color])
+  @@map("cart_items")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  status          String   @default("PENDING")
+  totalAmount     Float
+  deliveryAddress String
+  deliveryCity    String?
+  phone           String
+  note            String?
+  paymentMethod   String   @default("CASH")
+  paymentStatus   String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items   OrderItem[]
+  payment Payment?
+
+  @@index([userId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  title     String
+  price     Float
+  size      String?
+  color     String?
+  quantity  Int     @default(1)
+
+  @@map("order_items")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider      String
+  transactionId String?
+  amount        Float
+  status        String   @default("PENDING")
+  // JSON-encoded string of the raw webhook payload (SQLite has no Json type).
+  rawPayload    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("payments")
+}
