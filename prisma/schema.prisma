@@ -41,6 +41,11 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Email verification (registration OTP flow)
+  emailVerified             Boolean   @default(false)
+  verificationCode          String?
+  verificationCodeExpiresAt DateTime?
+
   orders        Order[]
   cartItems     CartItem[]
   wishlistItems WishlistItem[]

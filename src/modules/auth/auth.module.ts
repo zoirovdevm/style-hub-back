@@ -6,11 +6,13 @@ import { AuthService } from './auth.service';
 import { AuthResolver } from './auth.resolver';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
     PassportModule,
     UserModule,
+    MailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

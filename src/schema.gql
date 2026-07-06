@@ -122,12 +122,13 @@ type Mutation {
   initiatePayment(method: PaymentMethod!, orderId: ID!): PaymentUrlResult!
   login(input: LoginInput!): AuthPayload!
   refreshToken(refreshToken: String!): AuthPayload!
-  register(input: RegisterInput!): AuthPayload!
+  register(input: RegisterInput!): RegisterResult!
   removeBrand(id: ID!): Boolean!
   removeCartItem(id: ID!): Boolean!
   removeCategory(id: ID!): Boolean!
   removeProduct(id: ID!): Boolean!
   removeWishlistItem(id: ID!): Boolean!
+  resendVerificationCode(email: String!): Boolean!
   setOrderPaymentStatus(orderId: ID!, paid: Boolean!): Order!
   toggleWishlist(productId: ID!): ToggleWishlistResult!
   updateBrand(id: ID!, input: UpdateBrandInput!): Brand!
@@ -136,6 +137,7 @@ type Mutation {
   updateOrderStatus(input: UpdateOrderStatusInput!): Order!
   updateProduct(id: ID!, input: UpdateProductInput!): Product!
   updateProfile(input: UpdateProfileInput!): User!
+  verifyEmail(input: VerifyEmailInput!): AuthPayload!
 }
 
 type Order {
@@ -298,6 +300,10 @@ input RegisterInput {
   phone: String
 }
 
+type RegisterResult {
+  email: String!
+}
+
 enum Role {
   ADMIN
   USER
@@ -383,6 +389,11 @@ input VariantInput {
   color: String!
   size: String!
   stock: Int!
+}
+
+input VerifyEmailInput {
+  code: String!
+  email: String!
 }
 
 type WishlistItem {
