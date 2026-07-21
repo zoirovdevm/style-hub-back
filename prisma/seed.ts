@@ -13,17 +13,17 @@ async function main() {
     where: { email: adminEmail },
     // Admin is seeded directly, bypassing the normal register() ->
     // verifyEmail() flow — so it must be marked verified here, otherwise
-    // the new email-verification requirement on login() would lock the
-    // admin out. `update` also sets it, so re-running the seed fixes an
+    // the phone-verification requirement on login() would lock the admin
+    // out. `update` also sets it, so re-running the seed fixes an
     // already-existing admin row created before this flag existed.
-    update: { emailVerified: true },
+    update: { phoneVerified: true },
     create: {
       email: adminEmail,
       passwordHash,
       firstName: 'Admin',
       lastName: 'StyleHub',
       role: Role.ADMIN as string,
-      emailVerified: true,
+      phoneVerified: true,
     },
   });
 

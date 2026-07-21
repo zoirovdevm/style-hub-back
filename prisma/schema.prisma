@@ -41,8 +41,8 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  // Email verification (registration OTP flow)
-  emailVerified             Boolean   @default(false)
+  // Phone verification (registration OTP flow, code delivered via SMS)
+  phoneVerified             Boolean   @default(false)
   verificationCode          String?
   verificationCodeExpiresAt DateTime?
 

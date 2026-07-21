@@ -1,14 +1,11 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
 import { Transform } from 'class-transformer';
 
-// `phone` is optional and unique in the DB. A registration form that lets
-// phone be left blank naturally submits '' (not null/undefined) — and
-// since '' is a real, distinct string value, the SECOND person who also
-// leaves phone blank collides with the first on the unique constraint.
-// Normalizing '' to undefined means it's stored as NULL instead, and SQL
-// treats every NULL as distinct from every other NULL for uniqueness.
-const emptyStringToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
+// Strips spaces/dashes/parens so "+998 (90) 123-45-67" and "+998901234567"
+// both normalize to the same stored value — needed since the verification
+// code is sent to this exact number via SMS.
+const normalizePhone = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.replace(/[^\d+]/g, '') : value);
 
 @InputType()
 export class RegisterInput {
@@ -31,9 +28,11 @@ export class RegisterInput {
   @IsString()
   lastName?: string;
 
-  @Field({ nullable: true })
-  @Transform(emptyStringToUndefined)
-  @IsOptional()
+  // Required now — the registration OTP is delivered via SMS to this
+  // number, so an account can't be created (or verified) without it.
+  @Field()
+  @Transform(normalizePhone)
   @IsString()
-  phone?: string;
+  @Matches(/^\+998\d{9}$/, { message: 'Telefon raqam +998901234567 formatida bo‘lishi kerak' })
+  phone: string;
 }

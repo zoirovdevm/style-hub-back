@@ -25,4 +25,9 @@ export default () => ({
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.MAIL_FROM ?? 'StyleHub <no-reply@stylehub.uz>',
   },
+  sms: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    from: process.env.TWILIO_FROM ?? '',
+  },
 });

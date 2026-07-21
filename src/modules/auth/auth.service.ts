@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SmsService } from '../sms/sms.service';
 import { MailService } from '../mail/mail.service';
 import { RegisterInput } from './dto/register.input';
 import { LoginInput } from './dto/login.input';
@@ -17,8 +18,18 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly sms: SmsService,
     private readonly mail: MailService,
   ) {}
+
+  // Sends the code down both channels at once and doesn't let one failure
+  // block the other — SMS needs a working Eskiz account to actually
+  // deliver (falls back to a console log otherwise), while email already
+  // works via the Gmail SMTP config. Until Eskiz is set up, the buyer
+  // still gets a working code by email.
+  private async deliverCode(email: string, phone: string, code: string) {
+    await Promise.allSettled([this.sms.sendVerificationCode(phone, code), this.mail.sendVerificationCode(email, code)]);
+  }
 
   private generateCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -44,6 +55,9 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (existing) throw new ConflictException('Bu email allaqachon ro‘yxatdan o‘tgan');
 
+    const existingPhone = await this.prisma.user.findUnique({ where: { phone: input.phone } });
+    if (existingPhone) throw new ConflictException('Bu telefon raqam allaqachon ro‘yxatdan o‘tgan');
+
     const passwordHash = await bcrypt.hash(input.password, 10);
     const code = this.generateCode();
 
@@ -55,24 +69,24 @@ export class AuthService {
         lastName: input.lastName,
         phone: input.phone,
         role: Role.USER,
-        emailVerified: false,
+        phoneVerified: false,
         verificationCode: code,
         verificationCodeExpiresAt: new Date(Date.now() + VERIFICATION_CODE_TTL_MS),
       },
     });
 
-    await this.mail.sendVerificationCode(user.email, code);
+    await this.deliverCode(user.email, user.phone as string, code);
 
     // No tokens here on purpose — the account isn't usable until the code
-    // is confirmed via verifyEmail(). Only the email is returned so the
-    // frontend knows which address to show the code-entry screen for.
-    return { email: user.email };
+    // is confirmed via verifyEmail(). email/phone are returned so the
+    // frontend knows which account this is and what number the code went to.
+    return { email: user.email, phone: user.phone as string };
   }
 
   async verifyEmail(input: VerifyEmailInput) {
     const user = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (!user) throw new NotFoundException('Bunday foydalanuvchi topilmadi');
-    if (user.emailVerified) throw new BadRequestException('Email allaqachon tasdiqlangan');
+    if (user.phoneVerified) throw new BadRequestException('Telefon raqam allaqachon tasdiqlangan');
 
     if (
       !user.verificationCode ||
@@ -85,7 +99,7 @@ export class AuthService {
 
     const verified = await this.prisma.user.update({
       where: { id: user.id },
-      data: { emailVerified: true, verificationCode: null, verificationCodeExpiresAt: null, lastSeenAt: new Date() },
+      data: { phoneVerified: true, verificationCode: null, verificationCodeExpiresAt: null, lastSeenAt: new Date() },
     });
 
     const tokens = await this.issueTokens(verified.id, verified.role as Role);
@@ -95,7 +109,8 @@ export class AuthService {
   async resendVerificationCode(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('Bunday foydalanuvchi topilmadi');
-    if (user.emailVerified) throw new BadRequestException('Email allaqachon tasdiqlangan');
+    if (user.phoneVerified) throw new BadRequestException('Telefon raqam allaqachon tasdiqlangan');
+    if (!user.phone) throw new BadRequestException('Telefon raqam topilmadi');
 
     const code = this.generateCode();
     await this.prisma.user.update({
@@ -103,7 +118,7 @@ export class AuthService {
       data: { verificationCode: code, verificationCodeExpiresAt: new Date(Date.now() + VERIFICATION_CODE_TTL_MS) },
     });
 
-    await this.mail.sendVerificationCode(email, code);
+    await this.deliverCode(user.email, user.phone, code);
     return true;
   }
 
@@ -114,7 +129,7 @@ export class AuthService {
     const matches = await bcrypt.compare(input.password, user.passwordHash);
     if (!matches) throw new UnauthorizedException('Email yoki parol noto‘g‘ri');
     if (!user.isActive) throw new UnauthorizedException('Hisob bloklangan');
-    if (!user.emailVerified) throw new BadRequestException('EMAIL_NOT_VERIFIED');
+    if (!user.phoneVerified) throw new BadRequestException('PHONE_NOT_VERIFIED');
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
 
