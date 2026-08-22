@@ -1,6 +1,7 @@
 import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';
 import { Category } from '../../category/models/category.model';
 import { Brand } from '../../brand/models/brand.model';
+import { Store } from '../../store/models/store.model';
 import { ProductVariant } from './product-variant.model';
 
 @ObjectType()
@@ -88,4 +89,12 @@ export class Product {
 
   @Field(() => Brand, { nullable: true })
   brand?: Brand;
+
+  // Qaysi magazindan olingan — faqat admin paneli so'raydi; sayt (public)
+  // so'rovlari bu maydonni so'ramaydi, shuning uchun xaridorga ko'rinmaydi.
+  @Field(() => ID, { nullable: true })
+  storeId?: string;
+
+  @Field(() => Store, { nullable: true })
+  store?: Store;
 }

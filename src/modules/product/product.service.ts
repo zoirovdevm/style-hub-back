@@ -1,14 +1,49 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import slugify from 'slugify';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductInput, UpdateProductInput, VariantInput } from './dto/product.input';
 import { ProductFilterInput, ProductSort } from './dto/product-filter.input';
 
-const PRODUCT_INCLUDE = { category: true, brand: true, variants: true } as const;
+const PRODUCT_INCLUDE = { category: true, brand: true, store: true, variants: true } as const;
 
 @Injectable()
-export class ProductService {
+export class ProductService implements OnModuleInit {
+  private readonly logger = new Logger(ProductService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  // One-time (well, every-startup) self-heal: an earlier bug in
+  // order.service.ts's adjustInventory() moved `soldCount` in the same
+  // direction as `stock` instead of the opposite one, so every cancelled/
+  // reactivated order or paid<->unpaid toggle nudged soldCount the wrong
+  // way — some products ended up with a negative "sotildi" count on the
+  // admin dashboard. That bug is fixed now, but the bad numbers it already
+  // wrote stay wrong until something recomputes them. Recalculating from
+  // the actual paid OrderItems on every backend boot is cheap for a store
+  // this size and guarantees the number shown is always correct, even if
+  // another future bug corrupts it again.
+  async onModuleInit() {
+    try {
+      await this.recalculateSoldCounts();
+    } catch (error) {
+      this.logger.warn(`soldCount recalculation on startup failed: ${error}`);
+    }
+  }
+
+  async recalculateSoldCounts() {
+    const products = await this.prisma.product.findMany({ select: { id: true } });
+    for (const product of products) {
+      const { _sum } = await this.prisma.orderItem.aggregate({
+        _sum: { quantity: true },
+        where: { productId: product.id, order: { paymentStatus: 'PAID' } },
+      });
+      const correctSoldCount = _sum.quantity ?? 0;
+      await this.prisma.product.update({
+        where: { id: product.id },
+        data: { soldCount: correctSoldCount },
+      });
+    }
+  }
 
   /**
    * sizes/colors/images are stored as JSON-encoded strings (SQLite has no
@@ -50,8 +85,21 @@ export class ProductService {
     return variants.reduce((sum, v) => sum + Math.max(0, v.stock), 0);
   }
 
+  // Ommaviy (public) katalog uchun — faqat faol (isActive) tovarlar.
   async findAll(filter: ProductFilterInput) {
-    const where: any = { isActive: true };
+    return this.queryProducts(filter, { onlyActive: true });
+  }
+
+  // Faqat admin panel uchun (resolver'da @Roles(ADMIN) bilan qo'riqlanadi) —
+  // yashiringan (isActive=false) tovarlarni ham ko'rsatadi, masalan magazin
+  // o'chirilganda avtomatik yashiringan tovarlarni admin shu yerda ko'rib,
+  // xohlasa butunlay o'chirishi (hardDelete) uchun.
+  async findAllAdmin(filter: ProductFilterInput) {
+    return this.queryProducts(filter, { onlyActive: false });
+  }
+
+  private async queryProducts(filter: ProductFilterInput, { onlyActive }: { onlyActive: boolean }) {
+    const where: any = onlyActive ? { isActive: true } : {};
     // Every optional filter (size, color, search) is pushed as its own
     // AND-ed clause below instead of sharing a single top-level `where.OR` —
     // previously `sizes` and `search` both wrote to `where.OR`, so combining
@@ -146,23 +194,41 @@ export class ProductService {
     return this.mapProduct(product);
   }
 
+  // Prisma'ning "Unique constraint failed (sku)" xatosini admin tushunadigan
+  // xabarga aylantiradi — aks holda frontend'da qo'rqinchli texnik matn
+  // chiqib turardi.
+  private rethrowIfDuplicateSku(error: unknown): never {
+    const e = error as { code?: string; meta?: { target?: unknown } };
+    const target = String((e?.meta?.target as any) ?? '');
+    if (e?.code === 'P2002' && target.includes('sku')) {
+      throw new BadRequestException(
+        "Bu SKU (mahsulot kodi) allaqachon boshqa tovarda ishlatilgan — boshqa kod kiriting. Masalan: TSH-002",
+      );
+    }
+    throw error;
+  }
+
   async create(input: CreateProductInput) {
     const { variants, ...rest } = input;
-    const product = await this.prisma.product.create({
-      data: {
-        ...rest,
-        stock: this.aggregateStock(variants, input.stock),
-        sizes: this.serializeArray(input.sizes),
-        colors: this.serializeArray(input.colors),
-        images: this.serializeArray(input.images),
-        slug: `${slugify(input.title, { lower: true, strict: true })}-${Date.now().toString(36)}`,
-        ...(variants?.length
-          ? { variants: { create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock })) } }
-          : {}),
-      },
-      include: PRODUCT_INCLUDE,
-    });
-    return this.mapProduct(product);
+    try {
+      const product = await this.prisma.product.create({
+        data: {
+          ...rest,
+          stock: this.aggregateStock(variants, input.stock),
+          sizes: this.serializeArray(input.sizes),
+          colors: this.serializeArray(input.colors),
+          images: this.serializeArray(input.images),
+          slug: `${slugify(input.title, { lower: true, strict: true })}-${Date.now().toString(36)}`,
+          ...(variants?.length
+            ? { variants: { create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock })) } }
+            : {}),
+        },
+        include: PRODUCT_INCLUDE,
+      });
+      return this.mapProduct(product);
+    } catch (error) {
+      this.rethrowIfDuplicateSku(error);
+    }
   }
 
   async update(id: string, input: UpdateProductInput) {
@@ -192,18 +258,47 @@ export class ProductService {
         : {}),
     };
 
-    const product = await this.prisma.product.update({
-      where: { id },
-      data,
-      include: PRODUCT_INCLUDE,
-    });
-    return this.mapProduct(product);
+    try {
+      const product = await this.prisma.product.update({
+        where: { id },
+        data,
+        include: PRODUCT_INCLUDE,
+      });
+      return this.mapProduct(product);
+    } catch (error) {
+      this.rethrowIfDuplicateSku(error);
+    }
   }
 
+  // Yashirish (soft): tovar bazada qoladi, faqat saytdan ko'rinmay qoladi.
+  // Buyurtma tarixi, statistika va boshqa bog'liq yozuvlar buzilmaydi.
   async remove(id: string) {
     await this.findById(id);
     await this.prisma.product.update({ where: { id }, data: { isActive: false } });
     return true;
+  }
+
+  // Butunlay o'chirish (hard delete) — faqat admin, faqat allaqachon
+  // yashirilgan (isActive=false) tovarlar uchun ishlatiladi (masalan, magazin
+  // o'chirilganda avtomatik yashiringan tovarlarni admin keyin tozalash
+  // uchun). Agar bu tovar biror OrderItem'da ishlatilgan bo'lsa (ya'ni
+  // birov uni sotib olgan bo'lsa), Prisma FK cheklovi sabab o'chirish
+  // muvaffaqiyatsiz tugaydi — buni tushunarli xabarga aylantiramiz, tovar
+  // esa yashirilgan holicha (o'zgarishsiz) qoladi.
+  async hardDelete(id: string): Promise<boolean> {
+    await this.findById(id);
+    try {
+      await this.prisma.product.delete({ where: { id } });
+      return true;
+    } catch (error) {
+      const e = error as { code?: string };
+      if (e?.code === 'P2003' || e?.code === 'P2014') {
+        throw new BadRequestException(
+          "Bu tovar buyurtmalar tarixida ishlatilgan, shuning uchun butunlay o'chirib bo'lmaydi. U yashirilgan holicha qoladi.",
+        );
+      }
+      throw error;
+    }
   }
 
   async bestSellers(limit = 5) {

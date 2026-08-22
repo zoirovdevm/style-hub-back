@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { ForbiddenException, UseGuards } from '@nestjs/common';
 import { Order } from './models/order.model';
 import { PaginatedOrders } from './models/paginated-orders.model';
 import { OrderService } from './order.service';
@@ -23,9 +23,17 @@ export class OrderResolver {
     return this.orderService.myOrders(user.id);
   }
 
+  // Was previously reachable by ANY logged-in buyer for ANY order id — a
+  // customer who guessed or otherwise obtained another customer's order
+  // UUID could read their full name/phone/address/items. Now only the
+  // order's own owner or an admin can fetch it.
   @Query(() => Order)
-  order(@Args('id', { type: () => ID }) id: string) {
-    return this.orderService.findById(id);
+  async order(@CurrentUser() user: User, @Args('id', { type: () => ID }) id: string) {
+    const order = await this.orderService.findById(id);
+    if (user.role !== Role.ADMIN && order.userId !== user.id) {
+      throw new ForbiddenException('Bu buyurtma sizga tegishli emas');
+    }
+    return order;
   }
 
   @Mutation(() => Order)

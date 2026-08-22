@@ -35,22 +35,72 @@ model User {
   firstName    String
   lastName     String?
   avatar       String?
+  address      String?
   role         String    @default("USER")
   isActive     Boolean   @default(true)
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  // Phone verification (registration OTP flow, code delivered via SMS)
+  // Phone verification — legacy path only now. Registration itself verifies
+  // the phone (via PhoneOtp below) *before* the account row is even
+  // created, so new accounts are always created with phoneVerified: true.
+  // These three fields, and verifyEmail/resendVerificationCode in
+  // auth.service.ts, are kept only so any pre-existing account created
+  // under the old "create-first-then-verify" flow can still finish
+  // verifying — nothing new writes to them.
   phoneVerified             Boolean   @default(false)
   verificationCode          String?
   verificationCodeExpiresAt DateTime?
 
+  // Email verification — tracked per the data model spec, but there's no
+  // OTP/verification flow for it (registration deliberately never emails a
+  // code — see PhoneOtp/auth.service.ts). Reserved for a future flow.
+  emailVerified Boolean @default(false)
+
+  // Forgot-password / SMS OTP flow — separate fields from the registration
+  // code above so an in-flight password reset can never interfere with (or
+  // be confused with) phone verification state.
+  resetCode          String?
+  resetCodeExpiresAt DateTime?
+
+  // Forgot-password / email-link flow — a single-use opaque token embedded
+  // in the emailed reset URL (?token=...), distinct from resetCode above
+  // (which is a 6-digit code entered by hand on the SMS path). Whichever of
+  // the two the requester's identifier resolves to is the only one ever
+  // set for a given reset request.
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+
   orders        Order[]
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
+  reviews       Review[]
 
   @@map("users")
+}
+
+// Holds an SMS OTP for a phone number that is *mid-registration* and has no
+// User row yet (email/password/name aren't collected until after the phone
+// step succeeds, and User.email is a required unique column, so a
+// placeholder User can't be created early the way the old flow did).
+// One row per phone — a fresh send overwrites the previous code/attempts
+// rather than accumulating rows. Cleaned up once register() succeeds; a
+// stale unverified row is otherwise harmless and just gets overwritten by
+// the next send for that number.
+model PhoneOtp {
+  id         String    @id @default(uuid())
+  phone      String    @unique
+  code       String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  lastSentAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("phone_otps")
 }
 
 model Category {
@@ -80,6 +130,73 @@ model Brand {
   products Product[]
 
   @@map("brands")
+}
+
+// "Magazin" — tashqi do'kon/yetkazib beruvchi (masalan, Ko'k Saroy bozoridagi
+// bir magazin). Har bir tovar ixtiyoriy ravishda bitta magazinga bog'lanadi —
+// bu faqat admin panelda ko'rinadi (tovar qaysi magazindan olinganini
+// kuzatish uchun), saytdagi xaridorlarga ko'rsatilmaydi.
+model Store {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  // Ombor botiga kirish uchun maxfiy kod — admin buni faqat shu
+  // magazinchiga beradi. Kod kiritilgach magazinchining Telegram akkaunti
+  // shu magazinga biriktiriladi (TelegramStoreLink) va u boshqa
+  // magazinlarni umuman ko'rmaydi.
+  accessCode String? @unique
+  // Admin shu magazinchi bilan qancha foizga ("komissiya") ishlashini
+  // belgilaydi (masalan 20 — degani tushumning 20% adminga tegadi).
+  // Magazin sahifasidagi "Mening ulushim" raqami shu foiz asosida
+  // (revenue * commissionPercent / 100) hisoblanadi — store.service.ts
+  // dagi computeStats() ga qarang.
+  commissionPercent Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products      Product[]
+  deductions    StockDeduction[]
+  telegramLinks TelegramStoreLink[]
+
+  @@map("stores")
+}
+
+// Magazinchining Telegram akkaunti <-> magazin bog'lanishi. Bitta Telegram
+// akkaunt faqat bitta magazinga ulanadi; bitta magazinga bir nechta
+// sotuvchi ulanishi mumkin. Admin panelda "sotuvchilarni uzish" bosilsa
+// shu yozuvlar o'chadi va ular qayta kod kiritishi kerak bo'ladi.
+model TelegramStoreLink {
+  id               String   @id @default(uuid())
+  telegramUserId   String   @unique
+  telegramUsername String?
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@index([storeId])
+  @@map("telegram_store_links")
+}
+
+// Telegram bot orqali magazinchi "men bu tovardan N dona sotib yubordim"
+// deb belgilaganda yoziladigan tarix. Ombordagi qoldiq shu zahoti
+// kamaytiriladi; bu jadval esa kim, qachon, qaysi magazindan nimani
+// ayirganini keyin tekshirish uchun saqlanadi.
+model StockDeduction {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String?
+  color     String?
+  quantity  Int
+  // Botda kim bajargani (Telegram foydalanuvchi ma'lumotlari)
+  telegramUserId   String?
+  telegramUsername String?
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
+  @@map("stock_deductions")
 }
 
 model Product {
@@ -114,14 +231,46 @@ model Product {
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id])
 
+  // Qaysi magazindan olingan (faqat admin uchun; ixtiyoriy)
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
   orderItems    OrderItem[]
   variants      ProductVariant[]
+  reviews       Review[]
+  deductions    StockDeduction[]
 
   @@index([categoryId])
   @@index([brandId])
+  @@index([storeId])
   @@map("products")
+}
+
+// Buyer reviews (otziv) — a star rating + comment + an optional photo the
+// buyer attaches (e.g. a photo of themselves wearing the item). A user can
+// leave multiple reviews for the same product (e.g. after buying it again,
+// or updating their opinion) — each submission creates a new row rather
+// than overwriting a previous one. Product.rating and Product.reviewsCount
+// are recalculated from this table every time a review is created/deleted
+// (see review.service.ts), so those two fields stay accurate instead of
+// being static/manually-set numbers.
+model Review {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@map("reviews")
 }
 
 // Stock tracked per size+color combination (e.g. "M / Qora" might have 3
@@ -184,6 +333,14 @@ model Order {
   note            String?
   paymentMethod   String   @default("CASH")
   paymentStatus   String   @default("PENDING")
+  // Set once the buyer opens the Telegram bot's deep link (?start=order_<id>)
+  // — lets the bot recognize which order a later screenshot belongs to, and
+  // lets it message the buyer back once the admin approves/rejects it.
+  telegramChatId  String?
+  // Language the buyer picked on the bot's /start language-select keyboard —
+  // used so later bot messages for this order (receipt received, payment
+  // confirmed/rejected) reply in the same language instead of always Uzbek.
+  telegramLang    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -207,6 +364,26 @@ model OrderItem {
   quantity  Int     @default(1)
 
   @@map("order_items")
+}
+
+// Singleton row (id is always the literal "singleton") holding site-wide
+// settings that used to be hardcoded in the frontend — currently just the
+// home page hero/banner image, editable from the admin panel instead of a
+// developer having to replace a file in the repo.
+model SiteSettings {
+  id        String   @id @default("singleton")
+  heroImage String?
+  // Contact page details — editable from the admin panel instead of being
+  // hardcoded in the frontend. Null until an admin fills them in for the
+  // first time; the Contact page falls back to the original hardcoded
+  // values in that case so nothing breaks before this is set up.
+  contactAddress  String?
+  contactPhone    String?
+  contactTelegram String?
+  contactEmail    String?
+  updatedAt       DateTime @updatedAt
+
+  @@map("site_settings")
 }
 
 model Payment {

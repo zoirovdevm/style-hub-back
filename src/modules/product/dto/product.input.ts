@@ -117,6 +117,15 @@ export class CreateProductInput {
   @IsUUID()
   brandId?: string;
 
+  // Qaysi magazindan olingan (admin uchun; ixtiyoriy). Brand kabi bo'sh
+  // string undefined'ga aylantiriladi — select'da hech narsa tanlanmasa
+  // validatsiya xatosi chiqmasligi uchun.
+  @Field(() => ID, { nullable: true })
+  @Transform(emptyStringToUndefined)
+  @IsOptional()
+  @IsUUID()
+  storeId?: string;
+
   @Field({ defaultValue: false })
   @IsOptional()
   @IsBoolean()

@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   mkdirSync(join(process.cwd(), 'uploads', 'products'), { recursive: true });
+  mkdirSync(join(process.cwd(), 'uploads', 'reviews'), { recursive: true });
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
 

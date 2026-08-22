@@ -1,0 +1,57 @@
+# Wardrobe.uz — backend'ni Docker orqali serverga chiqarish.
+#
+# Alohida Dockerfile ishlatilmagan: eski loyihangizdagi
+# docker-compose'ga o'xshab, tayyor Node image + repo papkasini bog'lab
+# (bind mount) qo'yib, konteyner ichida install/build/start qilinadi.
+# Shunday qilib har bir "git pull" dan keyin shunchaki konteynerni qayta
+# ishga tushirish yetarli bo'ladi.
+#
+# MUHIM: bu faylning o'zida HECH QANDAY sir (parol/token) yo'q — haqiqiy
+# qiymatlar serverdagi ".env" faylida turadi, u git'ga tushmaydi
+# (.gitignore'da bor).
+services:
+  backend:
+    image: node:20.18.1-bookworm
+    container_name: wardrobe-backend
+    restart: unless-stopped
+    working_dir: /app
+    env_file:
+      - .env
+    ports:
+      # Tashqi (host) port — boshqa loyihalar (4000/4001/4002 da ishlab
+      # turgan eski frontend/backend) bilan to'qnashmasligi uchun 5101
+      # tanlandi. Serverda band bo'lsa, .env ichida BACKEND_PORT="boshqa_port"
+      # deb qo'ying — bu yerga qo'l tegmaydi.
+      # Konteyner ICHIDAGI port har doim 4000 (.env dagi PORT=4000 bilan
+      # mos kelishi shart — src/main.ts shu qiymatni o'qiydi).
+      - '${BACKEND_PORT:-5101}:4000'
+    volumes:
+      - ./:/app
+      # node_modules'ni alohida named volume qilib qo'yish — bind mount
+      # qilingan ./:/app ustidan Linux konteyner ichida o'rnatilgan
+      # node_modules'ni Windows'dagi (agar mahalliy ham shu papkada ishlab
+      # turgan bo'lsangiz) node_modules bilan aralashtirib
+      # yubormaslik/ustidan yozib tashlamaslik uchun kerak.
+      - backend_node_modules:/app/node_modules
+    command: >
+      bash -c "npm install &&
+               npx prisma generate &&
+               npx prisma migrate deploy &&
+               npm run build &&
+               npm run start:prod"
+    networks:
+      - wardrobe-net
+
+volumes:
+  backend_node_modules:
+
+networks:
+  # Frontend konteyneri shu tarmoq orqali backend'ga to'g'ridan-to'g'ri
+  # (Nginx'siz) murojaat qiladi — server-render qilinayotgan sahifalar
+  # (bosh sahifa, do'kon, mahsulot) uchun. "external: true" — bu tarmoq
+  # frontend'ning docker-compose'i bilan BIRGA ishlatiladi, shuning uchun
+  # birinchi marta serverga chiqarishdan oldin qo'lda yaratib qo'yish kerak:
+  #   docker network create wardrobe-net
+  wardrobe-net:
+    name: wardrobe-net
+    external: true

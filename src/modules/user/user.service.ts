@@ -40,17 +40,27 @@ export class UserService {
       ];
     }
 
-    const [list, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (filter.page - 1) * filter.limit,
         take: filter.limit,
+        include: { _count: { select: { orders: true } } },
       }),
       this.prisma.user.count({ where }),
     ]);
 
+    // Flatten Prisma's `_count.orders` into the plain `ordersCount` field
+    // the GraphQL User type exposes.
+    const list = rows.map(({ _count, ...user }) => ({ ...user, ordersCount: _count.orders }));
+
     return { list, total };
+  }
+
+  async setActive(id: string, isActive: boolean) {
+    await this.findById(id); // 404s if the id doesn't exist
+    return this.prisma.user.update({ where: { id }, data: { isActive } });
   }
 
   countAll() {

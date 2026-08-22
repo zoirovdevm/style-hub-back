@@ -46,6 +46,12 @@ type Category {
   updatedAt: DateTime!
 }
 
+input ContactMessageInput {
+  contact: String!
+  message: String!
+  name: String!
+}
+
 input CreateBrandInput {
   logo: String
   name: String!
@@ -61,6 +67,7 @@ input CreateCategoryInput {
 input CreateOrderInput {
   deliveryAddress: String!
   deliveryCity: String
+  itemIds: [ID!]
   note: String
   paymentMethod: PaymentMethod! = CASH
   phone: String!
@@ -80,9 +87,22 @@ input CreateProductInput {
   sizes: [String!]! = []
   sku: String!
   stock: Int! = 0
+  storeId: ID
   title: String!
   titleRu: String
   variants: [VariantInput!]
+}
+
+input CreateReviewInput {
+  comment: String!
+  image: String
+  productId: ID!
+  rating: Int!
+}
+
+input CreateStoreInput {
+  commissionPercent: Float
+  name: String!
 }
 
 type DashboardStats {
@@ -94,6 +114,7 @@ type DashboardStats {
   pendingOrders: Int!
   processingOrders: Int!
   recentOrders: [Order!]!
+  revenueThisMonth: Float!
   revenueToday: Float!
   revenueTotal: Float!
   shippedOrders: Int!
@@ -108,28 +129,42 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 scalar DateTime
 
 input LoginInput {
-  email: String!
+  identifier: String!
   password: String!
 }
 
 type Mutation {
   addToCart(input: AddToCartInput!): CartItem!
+  clearAllData: Boolean!
   clearCart: Boolean!
+  clearOrdersData: Boolean!
   createBrand(input: CreateBrandInput!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
   createOrder(input: CreateOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
+  createReview(input: CreateReviewInput!): Review!
+  createStore(input: CreateStoreInput!): Store!
+  deleteReview(id: ID!): Boolean!
+  hardDeleteProduct(id: ID!): Boolean!
   initiatePayment(method: PaymentMethod!, orderId: ID!): PaymentUrlResult!
   login(input: LoginInput!): AuthPayload!
   refreshToken(refreshToken: String!): AuthPayload!
-  register(input: RegisterInput!): RegisterResult!
+  regenerateStoreCode(id: ID!): String!
+  register(input: RegisterInput!): AuthPayload!
   removeBrand(id: ID!): Boolean!
   removeCartItem(id: ID!): Boolean!
   removeCategory(id: ID!): Boolean!
   removeProduct(id: ID!): Boolean!
+  removeStore(id: ID!): Boolean!
   removeWishlistItem(id: ID!): Boolean!
+  requestPasswordReset(input: RequestPasswordResetInput!): PasswordResetRequestResult!
   resendVerificationCode(email: String!): Boolean!
+  resetPassword(input: ResetPasswordInput!): AuthPayload!
+  revokeStoreSellers(id: ID!): Boolean!
+  sendContactMessage(input: ContactMessageInput!): Boolean!
+  sendRegisterOtp(input: SendRegisterOtpInput!): Boolean!
   setOrderPaymentStatus(orderId: ID!, paid: Boolean!): Order!
+  setUserActive(id: ID!, isActive: Boolean!): User!
   toggleWishlist(productId: ID!): ToggleWishlistResult!
   updateBrand(id: ID!, input: UpdateBrandInput!): Brand!
   updateCartItem(input: UpdateCartItemInput!): CartItem!
@@ -137,7 +172,10 @@ type Mutation {
   updateOrderStatus(input: UpdateOrderStatusInput!): Order!
   updateProduct(id: ID!, input: UpdateProductInput!): Product!
   updateProfile(input: UpdateProfileInput!): User!
+  updateSiteSettings(input: UpdateSiteSettingsInput!): SiteSettings!
+  updateStore(id: ID!, input: UpdateStoreInput!): Store!
   verifyEmail(input: VerifyEmailInput!): AuthPayload!
+  verifyRegisterOtp(input: VerifyRegisterOtpInput!): Boolean!
 }
 
 type Order {
@@ -162,6 +200,7 @@ input OrderFilterInput {
   limit: Int! = 20
   page: Int! = 1
   paymentStatus: PaymentStatus
+  search: String
   status: OrderStatus
 }
 
@@ -197,6 +236,10 @@ type PaginatedProducts {
 type PaginatedUsers {
   list: [User!]!
   total: Int!
+}
+
+type PasswordResetRequestResult {
+  method: String!
 }
 
 enum PaymentMethod {
@@ -238,6 +281,8 @@ type Product {
   slug: String!
   soldCount: Int!
   stock: Int!
+  store: Store
+  storeId: ID
   title: String!
   titleRu: String
   updatedAt: DateTime!
@@ -279,6 +324,7 @@ type Query {
   allOrders(filter: OrderFilterInput!): PaginatedOrders!
   bestSellers(limit: Float): [Product!]!
   brands: [Brand!]!
+  canReviewProduct(productId: ID!): Boolean!
   categories: [Category!]!
   category(slug: String!): Category!
   lowStockProducts(threshold: Float): [Product!]!
@@ -289,25 +335,93 @@ type Query {
   order(id: ID!): Order!
   product(slug: String!): Product!
   products(filter: ProductFilterInput!): PaginatedProducts!
+  productsAdmin(filter: ProductFilterInput!): PaginatedProducts!
+  reviews(productId: ID!): [Review!]!
+  siteSettings: SiteSettings!
+  storeOverview(id: ID!): StoreOverview!
+  stores: [Store!]!
+  storesStats: [StoreStats!]!
   users(filter: UsersFilterInput!): PaginatedUsers!
 }
 
 input RegisterInput {
+  address: String!
   email: String!
   firstName: String!
-  lastName: String
+  lastName: String!
   password: String!
   phone: String!
 }
 
-type RegisterResult {
-  email: String!
-  phone: String!
+input RequestPasswordResetInput {
+  identifier: String!
+}
+
+input ResetPasswordInput {
+  code: String
+  identifier: String
+  newPassword: String!
+  token: String
+}
+
+type Review {
+  comment: String!
+  createdAt: DateTime!
+  id: ID!
+  image: String
+  productId: ID!
+  rating: Int!
+  updatedAt: DateTime!
+  user: User
+  userId: ID!
 }
 
 enum Role {
   ADMIN
   USER
+}
+
+input SendRegisterOtpInput {
+  phone: String!
+}
+
+type SiteSettings {
+  contactAddress: String
+  contactEmail: String
+  contactPhone: String
+  contactTelegram: String
+  heroImage: String
+  id: String!
+  updatedAt: DateTime!
+}
+
+type Store {
+  commissionPercent: Float!
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  slug: String!
+  updatedAt: DateTime!
+}
+
+type StoreOverview {
+  products: [Product!]!
+  stats: StoreStats!
+}
+
+type StoreStats {
+  accessCode: String
+  commissionPercent: Float!
+  id: ID!
+  lowStockCount: Int!
+  myShare: Float!
+  name: String!
+  revenue: Float!
+  sellers: [String!]!
+  slug: String!
+  totalProducts: Int!
+  totalSold: Int!
+  totalStock: Int!
 }
 
 type ToggleWishlistResult {
@@ -353,19 +467,35 @@ input UpdateProductInput {
   sizes: [String!] = []
   sku: String
   stock: Int = 0
+  storeId: ID
   title: String
   titleRu: String
   variants: [VariantInput!]
 }
 
 input UpdateProfileInput {
+  address: String
   avatar: String
   firstName: String
   lastName: String
   phone: String
 }
 
+input UpdateSiteSettingsInput {
+  contactAddress: String
+  contactEmail: String
+  contactPhone: String
+  contactTelegram: String
+  heroImage: String
+}
+
+input UpdateStoreInput {
+  commissionPercent: Float
+  name: String
+}
+
 type User {
+  address: String
   avatar: String
   createdAt: DateTime!
   email: String!
@@ -374,6 +504,7 @@ type User {
   isActive: Boolean!
   lastName: String
   lastSeenAt: DateTime
+  ordersCount: Int
   phone: String
   role: Role!
   updatedAt: DateTime!
@@ -395,6 +526,11 @@ input VariantInput {
 input VerifyEmailInput {
   code: String!
   email: String!
+}
+
+input VerifyRegisterOtpInput {
+  code: String!
+  phone: String!
 }
 
 type WishlistItem {

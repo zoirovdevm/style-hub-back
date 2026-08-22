@@ -1,5 +1,5 @@
 import { InputType, Field, Int } from '@nestjs/graphql';
-import { IsInt, IsOptional, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { OrderStatus, PaymentStatus } from '../../../common/enums/order.enum';
 
 @InputType()
@@ -11,6 +11,15 @@ export class OrderFilterInput {
   @Field(() => PaymentStatus, { nullable: true })
   @IsOptional()
   paymentStatus?: PaymentStatus;
+
+  // Lets the admin find the exact order a Telegram payment receipt belongs
+  // to — matches against order number, buyer phone, and buyer name. Without
+  // this, telling apart three same-product orders in the list meant
+  // scrolling/guessing.
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @Field(() => Int, { defaultValue: 1 })
   @IsInt()

@@ -21,7 +21,7 @@ async function main() {
       email: adminEmail,
       passwordHash,
       firstName: 'Admin',
-      lastName: 'StyleHub',
+      lastName: 'Wardrobe',
       role: Role.ADMIN as string,
       phoneVerified: true,
     },
@@ -41,6 +41,7 @@ async function main() {
     { enSlug: 'jackets', name: 'Kurtkalar', nameRu: 'Куртки' },
     { enSlug: 'shoes', name: 'Poyabzallar', nameRu: 'Обувь' },
     { enSlug: 'accessories', name: 'Aksessuarlar', nameRu: 'Аксессуары' },
+    { enSlug: 'perfumery', name: 'Parfyumeriya', nameRu: 'Парфюмерия' },
   ];
 
   for (const cat of categories) {
@@ -55,7 +56,7 @@ async function main() {
     });
   }
 
-  const brands = ['StyleHub Basics', 'Urban Edge', 'Nordic Line'];
+  const brands = ['Wardrobe Basics', 'Urban Edge', 'Nordic Line'];
   for (const brandName of brands) {
     await prisma.brand.upsert({
       where: { slug: slugify(brandName, { lower: true }) },

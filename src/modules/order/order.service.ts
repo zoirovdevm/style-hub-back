@@ -63,15 +63,34 @@ export class OrderService {
         where: { id: item.productId },
         data: {
           stock: { increment: sign * item.quantity },
-          soldCount: { increment: sign * item.quantity },
+          // Opposite sign from stock, not the same one: when stock LEAVES
+          // the warehouse (decrease, sign -1) that's a sale, so soldCount
+          // should go UP; when stock comes BACK (increase, sign +1, e.g. a
+          // cancelled/refunded order) that item is no longer "sold", so
+          // soldCount should go DOWN. The previous version used `sign` for
+          // both fields, which moved them in the same direction instead of
+          // opposite ones — every cancel/reactivate or paid/unpaid toggle
+          // nudged soldCount the wrong way, eventually driving it negative
+          // (seen in production as e.g. "-5 sotildi").
+          soldCount: { increment: -sign * item.quantity },
         },
       });
     }
   }
 
   async createFromCart(userId: string, input: CreateOrderInput) {
+    // `itemIds` (from the cart page's selection checkboxes) scopes this to
+    // only those rows — always ANDed with `userId` so a caller can never
+    // check out someone else's cart items by passing their ids. Omitted
+    // (the "1-click buy" flow, or checkout reached with nothing selected)
+    // falls back to the whole cart, exactly like before this existed.
+    const cartItemWhere =
+      input.itemIds && input.itemIds.length > 0
+        ? { userId, id: { in: input.itemIds } }
+        : { userId };
+
     const cartItems = await this.prisma.cartItem.findMany({
-      where: { userId },
+      where: cartItemWhere,
       include: { product: { include: { variants: true } } },
     });
 
@@ -133,7 +152,11 @@ export class OrderService {
         include: { items: { include: { product: { include: { variants: true } } } } },
       });
 
-      await tx.cartItem.deleteMany({ where: { userId } });
+      // Only clears the items that were actually ordered — a partial
+      // (selected-items-only) checkout must leave the untouched, unselected
+      // cart rows behind for the buyer to check out later, not wipe the
+      // whole cart out from under them.
+      await tx.cartItem.deleteMany({ where: cartItemWhere });
 
       return created;
     });
@@ -163,6 +186,14 @@ export class OrderService {
     const where: any = {};
     if (filter.status) where.status = filter.status;
     if (filter.paymentStatus) where.paymentStatus = filter.paymentStatus;
+    if (filter.search) {
+      where.OR = [
+        { orderNumber: { contains: filter.search } },
+        { phone: { contains: filter.search } },
+        { user: { firstName: { contains: filter.search } } },
+        { user: { lastName: { contains: filter.search } } },
+      ];
+    }
 
     const [list, total] = await Promise.all([
       this.prisma.order.findMany({
@@ -271,6 +302,20 @@ export class OrderService {
     const result = await this.prisma.order.aggregate({
       _sum: { totalAmount: true },
       where: { paymentStatus: PaymentStatus.PAID, createdAt: { gte: startOfDay } },
+    });
+    return Number(result._sum.totalAmount ?? 0);
+  }
+
+  // Dashboarddagi "Oylik daromad" kartasi uchun — shu oyning 1-kunidan
+  // (00:00) hozirgacha, xuddi revenueToday() bilan bir xil mantiq.
+  async revenueThisMonth() {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const result = await this.prisma.order.aggregate({
+      _sum: { totalAmount: true },
+      where: { paymentStatus: PaymentStatus.PAID, createdAt: { gte: startOfMonth } },
     });
     return Number(result._sum.totalAmount ?? 0);
   }

@@ -7,3 +7,15 @@ uploads/
 *.db
 *.db-journal
 prisma/dev.db
+
+# Contains real, live secrets (Resend API key, Telegram bot tokens) baked in
+# as plaintext for the one-time VPS deploy — must never be pushed to a
+# public (or even private-but-shared) repo. Rotate those keys if this file
+# was ever committed/pushed before this line was added.
+server-setup.sh
+
+# One-time SQLite -> PostgreSQL migration dump (see prisma/export-data.ts /
+# import-data.ts) — contains every user's email, phone, and password hash
+# in plaintext JSON. Delete it once the Postgres migration is confirmed
+# working; never commit it either way.
+data-export.json

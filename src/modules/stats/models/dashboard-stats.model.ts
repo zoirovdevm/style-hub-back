@@ -37,6 +37,9 @@ export class DashboardStats {
   @Field(() => Float)
   revenueToday: number;
 
+  @Field(() => Float)
+  revenueThisMonth: number;
+
   @Field(() => [Product])
   bestSellers: Product[];
 

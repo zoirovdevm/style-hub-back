@@ -21,6 +21,18 @@ export class ProductResolver {
     return this.productService.findAll(filter);
   }
 
+  // Admin panel uchun — yashirilgan (isActive=false) tovarlarni ham
+  // qaytaradi, masalan magazin o'chirilganda avtomatik yashiringanlarni.
+  // Ommaviy `products` so'rovidan ataylab ajratilgan — shu tufayli oddiy
+  // xaridor yoki mehmon hech qanday yo'l bilan yashirilgan tovarlarni
+  // ko'ra olmaydi.
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Query(() => PaginatedProducts)
+  productsAdmin(@Args('filter') filter: ProductFilterInput) {
+    return this.productService.findAllAdmin(filter);
+  }
+
   @Public()
   @Query(() => Product)
   product(@Args('slug') slug: string) {
@@ -52,6 +64,15 @@ export class ProductResolver {
   @Mutation(() => Boolean)
   removeProduct(@Args('id', { type: () => ID }) id: string) {
     return this.productService.remove(id);
+  }
+
+  // Butunlay o'chirish — faqat admin, faqat allaqachon yashirilgan tovar
+  // uchun ishlatilishi mo'ljallangan (frontend shunday cheklaydi).
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Mutation(() => Boolean)
+  hardDeleteProduct(@Args('id', { type: () => ID }) id: string) {
+    return this.productService.hardDelete(id);
   }
 
   @UseGuards(GqlAuthGuard, RolesGuard)

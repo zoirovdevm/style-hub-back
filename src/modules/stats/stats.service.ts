@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { ProductService } from '../product/product.service';
 import { OrderService } from '../order/order.service';
-import { PresenceGateway } from '../presence/presence.gateway';
+import { PresenceService } from '../presence/presence.service';
 import { OrderStatus } from '../../common/enums/order.enum';
 
 @Injectable()
@@ -11,7 +11,10 @@ export class StatsService {
     private readonly userService: UserService,
     private readonly productService: ProductService,
     private readonly orderService: OrderService,
-    private readonly presenceGateway: PresenceGateway,
+    // Was PresenceGateway (the old WebSocket-based tracker) — replaced by
+    // PresenceService, the heartbeat-based tracker it was swapped for. Same
+    // getOnlineCount() shape, so this is a drop-in swap.
+    private readonly presenceService: PresenceService,
   ) {}
 
   async getDashboard() {
@@ -26,6 +29,7 @@ export class StatsService {
       cancelledOrders,
       revenueTotal,
       revenueToday,
+      revenueThisMonth,
       bestSellers,
       lowStockProducts,
       recentOrders,
@@ -40,6 +44,7 @@ export class StatsService {
       this.orderService.countByStatus(OrderStatus.CANCELLED),
       this.orderService.revenue(true),
       this.orderService.revenueToday(),
+      this.orderService.revenueThisMonth(),
       this.productService.bestSellers(5),
       this.productService.lowStock(5, 10),
       this.orderService.recentOrders(8),
@@ -47,7 +52,7 @@ export class StatsService {
 
     return {
       totalUsers,
-      onlineUsers: this.presenceGateway.getOnlineCount(),
+      onlineUsers: this.presenceService.getOnlineCount(),
       totalProducts,
       totalOrders,
       pendingOrders,
@@ -57,6 +62,7 @@ export class StatsService {
       cancelledOrders,
       revenueTotal,
       revenueToday,
+      revenueThisMonth,
       bestSellers,
       lowStockProducts,
       recentOrders,

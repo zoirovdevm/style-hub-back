@@ -1,5 +1,5 @@
-import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
+import { UseGuards, BadRequestException } from '@nestjs/common';
 import { User } from './models/user.model';
 import { PaginatedUsers } from './models/paginated-users.model';
 import { UserService } from './user.service';
@@ -30,5 +30,21 @@ export class UserResolver {
   @Roles(Role.ADMIN)
   users(@Args('filter') filter: UsersFilterInput) {
     return this.userService.findAll(filter);
+  }
+
+  @Mutation(() => User)
+  @Roles(Role.ADMIN)
+  setUserActive(
+    @CurrentUser() currentUser: User,
+    @Args('id', { type: () => ID }) id: string,
+    @Args('isActive') isActive: boolean,
+  ) {
+    // Without this, an admin could block their own account (nothing left
+    // to sign in and undo it with) — the toggle in the Users table blocks
+    // itself in the UI too, but the backend is the actual line of defense.
+    if (id === currentUser.id) {
+      throw new BadRequestException("O'zingizni bloklay olmaysiz");
+    }
+    return this.userService.setActive(id, isActive);
   }
 }

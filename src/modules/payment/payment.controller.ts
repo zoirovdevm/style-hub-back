@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, NotFoundException, Post, Query } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PaymentService } from './payment.service';
 import { ClickProvider } from './providers/click.provider';
 import { PaymeProvider } from './providers/payme.provider';
@@ -15,6 +16,7 @@ export class PaymentController {
     private readonly paymentService: PaymentService,
     private readonly click: ClickProvider,
     private readonly payme: PaymeProvider,
+    private readonly config: ConfigService,
   ) {}
 
   // ── Click ────────────────────────────────────────────────
@@ -112,15 +114,29 @@ export class PaymentController {
   }
 
   // ── Local test-mode "checkout" pages ────────────────────
+  //
+  // SECURITY: these two routes used to be reachable unconditionally — any
+  // logged-in buyer who knew (or guessed) an order's UUID could hit this
+  // URL directly and mark that order PAID for free, completely bypassing
+  // Click/Payme. They now hard-check the corresponding TEST_MODE config
+  // flag and 404 when it's off, so they go dead the moment real
+  // CLICK_TEST_MODE=false / PAYME_TEST_MODE=false is set in production —
+  // no separate step to "remember to delete this" before launch.
 
   @Get('click/test-checkout')
   async clickTestCheckout(@Query('orderId') orderId: string) {
+    if (!this.config.get<boolean>('click.testMode')) {
+      throw new NotFoundException();
+    }
     await this.paymentService.markPaid(orderId, `TEST-CLICK-${Date.now()}`);
     return { message: 'Test-mode Click payment marked as PAID', orderId };
   }
 
   @Get('payme/test-checkout')
   async paymeTestCheckout(@Query('orderId') orderId: string) {
+    if (!this.config.get<boolean>('payme.testMode')) {
+      throw new NotFoundException();
+    }
     await this.paymentService.markPaid(orderId, `TEST-PAYME-${Date.now()}`);
     return { message: 'Test-mode Payme payment marked as PAID', orderId };
   }

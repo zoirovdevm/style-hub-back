@@ -50,4 +50,31 @@ export class UploadController {
     if (!file) throw new BadRequestException('Fayl topilmadi');
     return { url: `/uploads/products/${file.filename}` };
   }
+
+  // Separate from uploadProductImage above: any logged-in buyer can attach
+  // a photo to their review (not admin-only), so this only requires
+  // GqlAuthGuard, not the ADMIN role.
+  @Post('review-image')
+  @UseGuards(GqlAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/reviews',
+        filename: (_req, file, cb) => {
+          cb(null, `${uuid()}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!ALLOWED_MIME.includes(file.mimetype)) {
+          return cb(new BadRequestException('Faqat rasm fayllari (jpg, png, webp, avif) qabul qilinadi'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 8 * 1024 * 1024 },
+    }),
+  )
+  uploadReviewImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Fayl topilmadi');
+    return { url: `/uploads/reviews/${file.filename}` };
+  }
 }
