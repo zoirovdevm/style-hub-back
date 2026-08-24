@@ -33,12 +33,17 @@ services:
       # turgan bo'lsangiz) node_modules bilan aralashtirib
       # yubormaslik/ustidan yozib tashlamaslik uchun kerak.
       - backend_node_modules:/app/node_modules
+    # "npm run start:prod" (= "node dist/main") ishlamadi — "nest build"
+    # bu loyihada tsconfig sozlamalariga qarab chiqishni "dist/src/main.js"
+    # ga yozadi, "dist/main.js" ga emas (eski server-setup.sh skriptida ham
+    # aynan shu sabab bilan ikkalasini ham tekshiruvchi fallback bor edi) —
+    # shu ikkalasidan qaysi biri mavjud bo'lsa, o'shani ishga tushiramiz.
     command: >
       bash -c "npm install &&
                npx prisma generate &&
                npx prisma migrate deploy &&
                npm run build &&
-               npm run start:prod"
+               if [ -f dist/src/main.js ]; then node dist/src/main.js; else node dist/main.js; fi"
     networks:
       - wardrobe-net
 

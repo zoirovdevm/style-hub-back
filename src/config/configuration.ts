@@ -66,5 +66,10 @@ export default () => ({
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     adminChatId: process.env.TELEGRAM_ADMIN_CHAT_ID ?? '',
     botUsername: process.env.TELEGRAM_BOT_USERNAME ?? '',
+    // Alohida bot — faqat "Yordam" (Contact) sahifasidan yuborilgan
+    // xabarlar shu bot orqali adminga boradi, to'lov/buyurtma botidan
+    // (TELEGRAM_BOT_TOKEN) ajratilgan holda. Bo'sh qoldirilsa, eski
+    // xatti-harakat davom etadi — xabarlar to'lov botiga boradi.
+    supportBotToken: process.env.TELEGRAM_SUPPORT_BOT_TOKEN ?? '',
   },
 });

@@ -88,6 +88,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private bot: Telegraf | null = null;
   private adminChatId = '';
   private botHandle: { stop: () => void } | null = null;
+  // "Yordam" (Contact) sahifasidan kelgan xabarlar uchun ALOHIDA bot —
+  // to'lov/buyurtma botidan (yuqoridagi `bot`) butunlay ajratilgan, shuning
+  // uchun Yordam xabarlari endi buyurtma tasdiqlash chatiga aralashmaydi.
+  // Faqat xabar YUBORISH uchun ishlatiladi (admindan javob kutmaydi), shu
+  // sababli launch()/polling shart emas — 409-conflict xavfi ham yo'q.
+  private supportBot: Telegraf | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -113,6 +119,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     // bot comes back on its own once the connection recovers, instead of
     // staying dead until someone restarts the server.
     this.botHandle = launchBotWithRetry(this.bot, this.logger, "To'lov boti");
+
+    const supportToken = this.config.get<string>('telegram.supportBotToken');
+    if (supportToken) {
+      // launch() qilinmaydi — bu bot faqat sendMessage uchun, hech qanday
+      // buyruq/xabar qabul qilmaydi, shuning uchun to'lov botiga ta'sir
+      // qilmaydi va Telegram 409-conflict xavfi yo'q.
+      this.supportBot = new Telegraf(supportToken);
+      this.logger.log("Yordam sahifasi xabarlari uchun alohida bot sozlandi.");
+    } else {
+      this.logger.warn(
+        "TELEGRAM_SUPPORT_BOT_TOKEN bo'sh — Yordam sahifasi xabarlari hozircha to'lov botiga boradi.",
+      );
+    }
   }
 
   onModuleDestroy() {
@@ -120,18 +139,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     this.bot?.stop('app shutdown');
   }
 
-  // Used by the public Contact/Support page form — forwards straight to the
-  // same admin Telegram chat the payment-screenshot flow uses, instead of
-  // email (MAIL_FROM deliverability is still fragile, and this reuses
-  // infrastructure that's already working). Throws if the bot isn't
-  // configured so the resolver can surface a clear error to the frontend
-  // instead of silently pretending the message was sent.
+  // Used by the public Contact/Support page form — sent through the
+  // dedicated `supportBot` (TELEGRAM_SUPPORT_BOT_TOKEN) when one is
+  // configured, so these land in their own chat, separate from order/
+  // payment notifications. Falls back to the main payment bot if no
+  // support bot token was set, so nothing breaks for setups that haven't
+  // added one yet. Throws if neither bot is configured so the resolver can
+  // surface a clear error to the frontend instead of silently pretending
+  // the message was sent.
   async notifyContactMessage(name: string, contact: string, message: string) {
-    if (!this.bot || !this.adminChatId) {
+    const bot = this.supportBot ?? this.bot;
+    if (!bot || !this.adminChatId) {
       throw new Error("Telegram bot sozlanmagan — xabar yuborib bo'lmadi.");
     }
 
-    await this.bot.telegram.sendMessage(
+    await bot.telegram.sendMessage(
       this.adminChatId,
       `✉️ Yangi xabar (Yordam sahifasi)\nIsm: ${name}\nBog'lanish: ${contact}\n\n${message}`,
     );
