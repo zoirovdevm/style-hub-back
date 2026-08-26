@@ -37,6 +37,13 @@ export default () => ({
     from: process.env.MAIL_FROM ?? `Wardrobe <${process.env.SMTP_USER ?? ''}>`,
   },
   sms: {
+    // DevSMS (https://devsms.uz) — tried FIRST (before the own-phone
+    // gateway/Eskiz/Twilio below) when DEVSMS_API_TOKEN is set. Auth is a
+    // single Bearer token (no email/password login step). devsmsFrom is the
+    // sender nickname passed as "from" in each request; DevSMS's shared
+    // "4546" nickname works without extra approval.
+    devsmsToken: process.env.DEVSMS_API_TOKEN ?? '',
+    devsmsFrom: process.env.DEVSMS_FROM ?? '4546',
     // "SMS Gateway for Android" (sms-gate.app) — sends SMS through your
     // own phone's own SIM/number, tried first (before Eskiz/Twilio below)
     // when all three of these are set. gatewayBaseUrl is the phone's

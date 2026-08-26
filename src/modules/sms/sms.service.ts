@@ -1,6 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+// DevSMS (https://devsms.uz) — tried FIRST (before the own-phone gateway/
+// Eskiz/Twilio below) whenever DEVSMS_API_TOKEN is set. Auth is a single
+// long-lived Bearer token (no separate login/session step like Eskiz).
+//   POST /api/send_sms.php
+//   Headers: Authorization: Bearer <token>, Content-Type: application/json
+//   Body: { phone, message, from?, callback_url?, type? }
+//     -> { success: true, message, data: { sms_id, request_id, status,
+//          parts_count, total_cost, balance, type } }
+//   On failure (HTTP 400/401/403/404/500):
+//     -> { success: false, error }
+// `phone` is digits only, same normalization as Eskiz below.
+const DEVSMS_BASE_URL = 'https://devsms.uz/api';
+
 // "SMS Gateway for Android" (https://sms-gate.app,
 // github.com/capcom6/android-sms-gateway) — sends SMS through YOUR OWN
 // phone's own SIM/number instead of any third-party SMS API. This is the
@@ -65,6 +78,9 @@ const TWILIO_BASE_URL = 'https://api.twilio.com/2010-04-01';
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
 
+  private readonly devsmsToken: string;
+  private readonly devsmsFrom: string;
+
   private readonly gatewayBaseUrl: string;
   private readonly gatewayUsername: string;
   private readonly gatewayPassword: string;
@@ -83,6 +99,9 @@ export class SmsService {
   private readonly from: string;
 
   constructor(private readonly config: ConfigService) {
+    this.devsmsToken = this.config.get<string>('sms.devsmsToken') ?? '';
+    this.devsmsFrom = this.config.get<string>('sms.devsmsFrom') ?? '4546';
+
     this.gatewayBaseUrl = (this.config.get<string>('sms.gatewayBaseUrl') ?? '').replace(/\/+$/, '');
     this.gatewayUsername = this.config.get<string>('sms.gatewayUsername') ?? '';
     this.gatewayPassword = this.config.get<string>('sms.gatewayPassword') ?? '';
@@ -95,11 +114,15 @@ export class SmsService {
     this.authToken = this.config.get<string>('sms.authToken') ?? '';
     this.from = this.config.get<string>('sms.from') ?? '';
 
-    if (!this.gatewayConfigured && !this.eskizConfigured && !this.twilioConfigured) {
+    if (!this.devsmsConfigured && !this.gatewayConfigured && !this.eskizConfigured && !this.twilioConfigured) {
       this.logger.warn(
-        'SMS provider sozlanmagan (.env dagi SMS_GATEWAY_* / ESKIZ_EMAIL+ESKIZ_PASSWORD / TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN+TWILIO_FROM bo‘sh) — tasdiqlash kodlari konsolga chiqariladi.',
+        'SMS provider sozlanmagan (.env dagi DEVSMS_API_TOKEN / SMS_GATEWAY_* / ESKIZ_EMAIL+ESKIZ_PASSWORD / TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN+TWILIO_FROM bo‘sh) — tasdiqlash kodlari konsolga chiqariladi.',
       );
     }
+  }
+
+  private get devsmsConfigured() {
+    return !!this.devsmsToken;
   }
 
   private get gatewayConfigured() {
@@ -130,6 +153,11 @@ export class SmsService {
     // this exact wording.
     const message = `Wardrobe: sizning tasdiqlash kodingiz — ${code}. Kodni hech kimga bermang.`;
 
+    if (this.devsmsConfigured) {
+      await this.sendViaDevSms(phone, code, message);
+      return;
+    }
+
     if (this.gatewayConfigured) {
       await this.sendViaOwnGateway(phone, code, message);
       return;
@@ -148,7 +176,40 @@ export class SmsService {
     this.logger.log(`[SMS TASDIQLASH KODI] ${phone} -> ${code} (SMS provider sozlanmagani uchun SMS jo'natilmadi)`);
   }
 
-  // ---- SMS Gateway for Android (own phone number, primary) ----------
+  // ---- DevSMS (primary provider) --------------------------------------
+
+  private async sendViaDevSms(phone: string, code: string, message: string) {
+    try {
+      // DevSMS wants digits only, no leading "+" — same normalization as
+      // Eskiz below (phone already arrives as "+998901234567").
+      const devsmsPhone = phone.replace(/\D/g, '');
+
+      const res = await fetch(`${DEVSMS_BASE_URL}/send_sms.php`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.devsmsToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone: devsmsPhone, message, from: this.devsmsFrom }),
+      });
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok || body?.success === false) {
+        throw new Error(`DevSMS xato: ${res.status} ${JSON.stringify(body)}`);
+      }
+      this.logger.log(
+        `SMS yuborildi (DevSMS): ${phone} (id: ${body?.data?.sms_id ?? '?'}, status: ${body?.data?.status ?? '?'})`,
+      );
+    } catch (error) {
+      this.logger.error(`SMS yuborishda XATOLIK (DevSMS, ${phone}): ${(error as Error).message}`);
+      // Fall back to logging the code so registration/testing can continue
+      // even if the real send failed (bad token, insufficient balance,
+      // network issue, etc.).
+      this.logger.log(`[SMS TASDIQLASH KODI] ${phone} -> ${code}`);
+    }
+  }
+
+  // ---- SMS Gateway for Android (own phone number, secondary) ----------
 
   private async sendViaOwnGateway(phone: string, code: string, message: string) {
     try {
