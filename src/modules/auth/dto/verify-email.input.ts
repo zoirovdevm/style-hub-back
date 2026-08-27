@@ -9,6 +9,6 @@ export class VerifyEmailInput {
 
   @Field()
   @IsString()
-  @Length(6, 6)
+  @Length(5, 5)
   code: string;
 }

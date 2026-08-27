@@ -52,7 +52,9 @@ export class AuthService {
   }
 
   private generateCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // 5 digits (10000-99999) — was 6 digits until the SMS text format was
+    // changed to require exactly 5.
+    return Math.floor(10000 + Math.random() * 90000).toString();
   }
 
   // Register phone step and forgot-password SMS step both used to get a

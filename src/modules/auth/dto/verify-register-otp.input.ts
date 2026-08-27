@@ -3,7 +3,7 @@ import { IsString, Length, Matches } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UZ_PHONE_REGEX, normalizePhoneValue } from '../../../common/utils/phone.util';
 
-// Register step 2 — the 6-digit SMS code for the phone number from step 1.
+// Register step 2 — the 5-digit SMS code for the phone number from step 1.
 // On success the service marks that PhoneOtp row verified for a bounded
 // window (see auth.service.ts), which is what register() checks for later
 // — this mutation itself does not create or touch any User row.
@@ -17,6 +17,6 @@ export class VerifyRegisterOtpInput {
 
   @Field()
   @IsString()
-  @Length(6, 6)
+  @Length(5, 5)
   code: string;
 }

@@ -4,7 +4,7 @@ import { IsString, IsOptional, Length, MinLength } from 'class-validator';
 // Two mutually-exclusive shapes now live in one input, matching the two
 // forgot-password paths in AuthService.resetPassword:
 //   - email path:  { token, newPassword }              (link from the email)
-//   - phone path:  { identifier, code, newPassword }    (6-digit SMS code)
+//   - phone path:  { identifier, code, newPassword }    (5-digit SMS code)
 // All three of token/identifier/code are optional here on purpose — the
 // service is what enforces that exactly one complete shape was sent (a
 // stray `token` together with `identifier`/`code` just makes the service
@@ -25,7 +25,7 @@ export class ResetPasswordInput {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
-  @Length(6, 6)
+  @Length(5, 5)
   code?: string;
 
   @Field()

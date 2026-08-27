@@ -138,20 +138,13 @@ export class SmsService {
   }
 
   async sendVerificationCode(phone: string, code: string) {
-    // Brand name leads, code trails at the end of a full sentence (rather
-    // than a bare "Label: CODE" line) — a personal SIM's own-phone gateway
-    // route (sendViaOwnGateway below) has no carrier-level "this sender is
-    // an approved A2P source" status the way Eskiz/Twilio do, so recipients'
-    // phones sometimes route these into Spam based on pattern-matching.
-    // This wording won't reliably prevent that (it's the recipient's
-    // phone/carrier doing the classifying, not anything under our control)
-    // — the one real fix is the recipient marking a first message "Not
-    // spam" once — but it's a small, free way to look less like a bare
-    // OTP-spam template. Kept context-neutral (not "registration code"
-    // specifically) since this one method also serves the forgot-password
-    // SMS branch in auth.service.ts — a register OTP and a reset OTP share
-    // this exact wording.
-    const message = `Wardrobe: sizning tasdiqlash kodingiz — ${code}. Kodni hech kimga bermang.`;
+    // Fixed format, deliberately no extra sentence/punctuation beyond the
+    // code itself (e.g. no "Kodni hech kimga bermang" trailer) — kept
+    // context-neutral (not "registration code" specifically) since this one
+    // method also serves the forgot-password SMS branch in auth.service.ts
+    // and the legacy email-verification resend path — every phone code
+    // shares this exact wording.
+    const message = `Wardrobe.uz sayti uchun kirish kodingiz: ${code}`;
 
     if (this.devsmsConfigured) {
       await this.sendViaDevSms(phone, code, message);
