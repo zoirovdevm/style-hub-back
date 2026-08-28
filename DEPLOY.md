@@ -251,6 +251,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
     location /uploads/ {
@@ -265,6 +266,7 @@ server {
     location /presence/ {
         proxy_pass http://127.0.0.1:5101;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
     location /ws/ {
         proxy_pass http://127.0.0.1:5101;
@@ -285,6 +287,37 @@ server {
     }
 }
 ```
+
+**MUHIM — real IP forwarding haqida (performance/rate-limit debug natijasida qo'shildi):**
+`X-Forwarded-For $proxy_add_x_forwarded_for` qatorlari `/graphql` va
+`/presence/` bloklariga ataylab qo'shildi — bu backend'dagi
+`app.set('trust proxy', 1)` (src/main.ts) bilan birga ishlaydi. Buning
+sababi: bu ikkalasi bo'lmasa, Express har doim so'rovni Nginx'ning o'zidan
+(127.0.0.1) kelayotgandek ko'radi — ya'ni butun dunyodagi BARCHA
+tashrifchilar bitta "IP" sifatida hisoblanadi, va `ThrottlerModule`dagi
+IP-bo'yicha limit aslida SAYT BO'YICHA UMUMIY limitga aylanib qoladi
+(bir foydalanuvchi emas, hammaning yig'indisi). Bu sinab ko'rilganda
+production'da atigi ~30 ta GraphQL so'rovdan keyin (bir necha soniyada)
+`ThrottlerException: Too Many Requests` xatosi chiqishi tasdiqlangan —
+bu esa SSR sahifalarning tasodifiy vaqtlarda umuman ochilmay qolishiga
+(serverFetchGraphQL xato bo'lsa throw qiladi) sabab bo'lgan asosiy
+muammolardan biri edi.
+
+Agar serverdagi joriy `/etc/nginx/sites-available/wardrobe` fayli yuqoridagi
+shablondan oldinroq yaratilgan bo'lsa (ya'ni `X-Forwarded-For` qatori yo'q),
+uni qo'lda qo'shib, keyin tekshirib qayta yuklash kerak:
+```bash
+nano /etc/nginx/sites-available/wardrobe
+# /graphql va /presence/ bloklariga:
+#   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+nginx -t && systemctl reload nginx
+```
+Backend tomonidagi `trust proxy` o'zgarishi kuchga kirishi uchun
+`docker compose up -d --build` bilan backend qayta qurilishi kerak (oddiy
+`restart` yetarli emas — kod o'zgargan, image emas, bind-mount orqali kod
+konteynerga tushadi, lekin Node jarayoni qayta ishga tushishi kerak; shu
+sababli eng ishonchli yo'l — pastdagi "6-band"dagi git pull + rebuild
+zanjiri).
 
 ```bash
 ln -sf /etc/nginx/sites-available/wardrobe /etc/nginx/sites-enabled/wardrobe
