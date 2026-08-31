@@ -271,6 +271,31 @@ export class OrderService {
     return this.mapOrderProducts(order);
   }
 
+  // Distinct from setPaymentStatus(orderId, false) (which just means "not
+  // (yet) paid," the default state every new order starts in) — this marks
+  // a receipt an admin actively looked at and turned down, so the buyer's
+  // own account can show a clear red "rejected" state instead of looking
+  // identical to an order nobody has reviewed yet. Reuses PaymentStatus.FAILED
+  // (previously only reachable via the Click/Payme webhook path in
+  // payment.service.ts, which isn't live yet since real credentials aren't
+  // configured) rather than adding a new enum value.
+  async rejectPayment(orderId: string) {
+    const existing = await this.findById(orderId);
+    if (existing.paymentStatus === PaymentStatus.PAID) {
+      throw new BadRequestException(
+        "To'langan buyurtmani rad etib bo'lmaydi — avval \"to'lanmagan\"ga qaytaring",
+      );
+    }
+    if (existing.paymentStatus === PaymentStatus.FAILED) return existing;
+
+    const order = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { paymentStatus: PaymentStatus.FAILED },
+      include: { items: { include: { product: { include: { variants: true } } } } },
+    });
+    return this.mapOrderProducts(order);
+  }
+
   recentOrders(limit = 8) {
     return this.prisma.order.findMany({
       orderBy: { createdAt: 'desc' },

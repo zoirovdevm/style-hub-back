@@ -74,4 +74,16 @@ export class OrderResolver {
     await this.telegramService.notifyPaymentStatus(order, paid);
     return order;
   }
+
+  // Web-panel counterpart to the Telegram bot's own ❌ "Rad etish" button —
+  // both now go through OrderService.rejectPayment (PaymentStatus.FAILED),
+  // and both notify the buyer the same way, so it makes no difference to
+  // the buyer which channel the admin used.
+  @Roles(Role.ADMIN)
+  @Mutation(() => Order)
+  async rejectOrderPayment(@Args('orderId', { type: () => ID }) orderId: string) {
+    const order = await this.orderService.rejectPayment(orderId);
+    await this.telegramService.notifyPaymentStatus(order, false);
+    return order;
+  }
 }

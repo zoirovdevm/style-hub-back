@@ -208,8 +208,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     // this in the current environment before the user runs `npm install`.
     bot.on('photo', async (ctx: any) => {
       const chatId = String(ctx.chat.id);
+      // Includes FAILED (a previously-rejected receipt), not just PENDING —
+      // without this, a buyer who got rejected and sends a corrected
+      // screenshot to retry would hit "no pending order found" instead of
+      // this actually forwarding to the admin, since rejectPayment() now
+      // moves the order out of PENDING into FAILED instead of leaving it
+      // untouched.
       const order = await this.prisma.order.findFirst({
-        where: { telegramChatId: chatId, paymentStatus: PaymentStatus.PENDING },
+        where: { telegramChatId: chatId, paymentStatus: { in: [PaymentStatus.PENDING, PaymentStatus.FAILED] } },
         orderBy: { createdAt: 'desc' },
         include: { items: { include: { product: true } } },
       });
@@ -309,11 +315,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await ctx.editMessageCaption(`${existingCaption}\n\n✅ TASDIQLANDI`);
           await this.notifyPaymentStatus(order, true);
         } else {
-          // Deliberately does NOT call setPaymentStatus here — a rejected
-          // receipt just means "not yet paid," which is already this
-          // order's current state (createFromCart leaves every new order
-          // PENDING), so there's nothing to change in the database, only
-          // the buyer to notify.
+          // rejectPayment marks the order PaymentStatus.FAILED — distinct
+          // from the default PENDING every new order starts in — so the
+          // buyer's own account can show a clear "rejected" state instead
+          // of looking identical to an order nobody has reviewed yet.
+          await this.orderService.rejectPayment(orderId);
           await ctx.answerCbQuery('Rad etildi');
           await ctx.editMessageCaption(`${existingCaption}\n\n❌ RAD ETILDI`);
           await this.notifyPaymentStatus(order, false);
