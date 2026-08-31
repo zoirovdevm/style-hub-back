@@ -30,11 +30,11 @@ const T: Record<BotLang, {
     orderNotFound: "Bu buyurtma topilmadi. Iltimos saytdan qaytadan urinib ko'ring.",
     receiptAccepted: "Chek qabul qilindi, admin tekshirmoqda. Tez orada javob beriladi.",
     paymentConfirmed: (order) =>
-      `Buyurtma #${order.orderNumber} uchun to'lovingiz muvaffaqiyatli tasdiqlandi! ` +
+      `✅ Buyurtma #${order.orderNumber} uchun to'lovingiz muvaffaqiyatli tasdiqlandi! ` +
       `Bizni tanlaganingiz uchun katta rahmat 🙏 Tez orada buyurtmangiz yetkazib beriladi.`,
     paymentRejected: (order) =>
-      `Buyurtma #${order.orderNumber} uchun yuborgan chekingiz, afsuski, hozircha tasdiqlanmadi. ` +
-      `Iltimos, to'g'ri skrinshot bilan qayta urinib ko'ring yoki saytdagi telefon raqami orqali biz bilan bog'laning.`,
+      `❌ Buyurtma #${order.orderNumber} uchun yuborgan chekingiz, afsuski, tasdiqlanmadi. ` +
+      `Iltimos, to'lovni qaytadan amalga oshirib, to'g'ri skrinshot bilan qayta urinib ko'ring yoki saytdagi telefon raqami orqali biz bilan bog'laning.`,
   },
   ru: {
     useWebsiteButton:
@@ -46,11 +46,11 @@ const T: Record<BotLang, {
     orderNotFound: 'Этот заказ не найден. Пожалуйста, попробуйте снова с сайта.',
     receiptAccepted: 'Чек получен, админ проверяет. Ответ будет совсем скоро.',
     paymentConfirmed: (order) =>
-      `Оплата по заказу #${order.orderNumber} успешно подтверждена! ` +
+      `✅ Оплата по заказу #${order.orderNumber} успешно подтверждена! ` +
       `Большое спасибо, что выбрали нас 🙏 Скоро ваш заказ будет доставлен.`,
     paymentRejected: (order) =>
-      `К сожалению, чек по заказу #${order.orderNumber} пока не подтверждён. ` +
-      `Пожалуйста, отправьте корректный скриншот ещё раз или свяжитесь с нами по телефону, указанному на сайте.`,
+      `❌ К сожалению, чек по заказу #${order.orderNumber} не подтверждён. ` +
+      `Пожалуйста, повторите оплату и отправьте корректный скриншот ещё раз, либо свяжитесь с нами по телефону, указанному на сайте.`,
   },
 };
 
@@ -157,6 +157,31 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.adminChatId,
       `✉️ Yangi xabar (Yordam sahifasi)\nIsm: ${name}\nBog'lanish: ${contact}\n\n${message}`,
     );
+  }
+
+  // Sends the buyer their ✅/❌ payment-status message. Shared by both
+  // places an admin can confirm/reject a payment: the bot's own inline
+  // ✅/❌ buttons under the receipt photo (registerHandlers' callback_query
+  // branch below), and the paid/unpaid toggle on the ADMIN WEB PANEL
+  // (OrderResolver.setOrderPaymentStatus) — before this existed, only the
+  // bot-button path actually told the buyer anything; toggling payment from
+  // the website silently updated the database with no notification at all.
+  // Silently does nothing (not an error) when the bot isn't configured or
+  // this buyer never opened a chat with it (telegramChatId unset) — there's
+  // simply nowhere to send a Telegram message in that case, and payment
+  // status itself still updates fine either way.
+  async notifyPaymentStatus(
+    order: { orderNumber: string; telegramChatId?: string | null; telegramLang?: string | null },
+    paid: boolean,
+  ) {
+    if (!this.bot || !order.telegramChatId) return;
+    const lang: BotLang = order.telegramLang === 'ru' ? 'ru' : 'uz';
+    const text = paid ? T[lang].paymentConfirmed(order) : T[lang].paymentRejected(order);
+    try {
+      await this.bot.telegram.sendMessage(order.telegramChatId, text);
+    } catch (error) {
+      this.logger.error(`Xaridorga to'lov xabari yuborilmadi (buyurtma #${order.orderNumber}): ${(error as Error).message}`);
+    }
   }
 
   private registerHandlers(bot: Telegraf) {
@@ -277,21 +302,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       try {
         const order = await this.orderService.findById(orderId);
-        const lang: BotLang = (order as any).telegramLang === 'ru' ? 'ru' : 'uz';
 
         if (action === 'approve') {
           await this.orderService.setPaymentStatus(orderId, true);
           await ctx.answerCbQuery('Tasdiqlandi ✅');
           await ctx.editMessageCaption(`${existingCaption}\n\n✅ TASDIQLANDI`);
-          if (order.telegramChatId) {
-            await ctx.telegram.sendMessage(order.telegramChatId, T[lang].paymentConfirmed(order));
-          }
+          await this.notifyPaymentStatus(order, true);
         } else {
+          // Deliberately does NOT call setPaymentStatus here — a rejected
+          // receipt just means "not yet paid," which is already this
+          // order's current state (createFromCart leaves every new order
+          // PENDING), so there's nothing to change in the database, only
+          // the buyer to notify.
           await ctx.answerCbQuery('Rad etildi');
           await ctx.editMessageCaption(`${existingCaption}\n\n❌ RAD ETILDI`);
-          if (order.telegramChatId) {
-            await ctx.telegram.sendMessage(order.telegramChatId, T[lang].paymentRejected(order));
-          }
+          await this.notifyPaymentStatus(order, false);
         }
       } catch (error) {
         this.logger.error(`Callback xatolik: ${(error as Error).message}`);

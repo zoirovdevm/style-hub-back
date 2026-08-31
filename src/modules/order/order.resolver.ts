@@ -12,11 +12,15 @@ import { Role } from '../../common/enums/role.enum';
 import { GqlAuthGuard } from '../../common/guards/gql-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { User } from '../user/models/user.model';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Resolver(() => Order)
 @UseGuards(GqlAuthGuard, RolesGuard)
 export class OrderResolver {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(
+    private readonly orderService: OrderService,
+    private readonly telegramService: TelegramService,
+  ) {}
 
   @Query(() => [Order])
   myOrders(@CurrentUser() user: User) {
@@ -55,10 +59,19 @@ export class OrderResolver {
 
   @Roles(Role.ADMIN)
   @Mutation(() => Order)
-  setOrderPaymentStatus(
+  async setOrderPaymentStatus(
     @Args('orderId', { type: () => ID }) orderId: string,
     @Args('paid', { type: () => Boolean }) paid: boolean,
   ) {
-    return this.orderService.setPaymentStatus(orderId, paid);
+    const order = await this.orderService.setPaymentStatus(orderId, paid);
+    // The Telegram bot's own ✅/❌ buttons already notified the buyer when
+    // an admin confirmed/rejected payment that way — this mutation (the
+    // ADMIN WEB PANEL's paid/unpaid toggle) is the OTHER place an admin can
+    // do the exact same thing, and it silently updated the database with no
+    // notification at all. notifyPaymentStatus is a no-op if the bot isn't
+    // configured or this buyer never opened a chat with it, so this is safe
+    // to call unconditionally.
+    await this.telegramService.notifyPaymentStatus(order, paid);
+    return order;
   }
 }
