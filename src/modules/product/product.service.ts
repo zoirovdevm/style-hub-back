@@ -55,12 +55,19 @@ export class ProductService implements OnModuleInit {
     return JSON.stringify(value ?? []);
   }
 
+  // Same JSON-string-column pattern as sizes/colors/images, but for the
+  // nested [{ color, images }] shape (see ColorImagesInput / ColorImages).
+  private serializeColorImages(value?: { color: string; images: string[] }[] | null): string {
+    return JSON.stringify(value ?? []);
+  }
+
   private mapProduct<T extends { sizes: unknown; colors: unknown; images: unknown }>(product: T) {
     return {
       ...product,
       sizes: this.parseArray((product as any).sizes),
       colors: this.parseArray((product as any).colors),
       images: this.parseArray((product as any).images),
+      colorImages: this.parseColorImages((product as any).colorImages),
       variants: (product as any).variants ?? [],
     };
   }
@@ -71,6 +78,23 @@ export class ProductService implements OnModuleInit {
     try {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private parseColorImages(value: unknown): { color: string; images: string[] }[] {
+    if (Array.isArray(value)) return value as { color: string; images: string[] }[];
+    if (typeof value !== 'string') return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) return [];
+      // Defensively drop any malformed entry instead of letting a bad row
+      // (e.g. hand-edited data) break the whole product query.
+      return parsed.filter(
+        (v): v is { color: string; images: string[] } =>
+          !!v && typeof v.color === 'string' && Array.isArray(v.images),
+      );
     } catch {
       return [];
     }
@@ -218,6 +242,7 @@ export class ProductService implements OnModuleInit {
           sizes: this.serializeArray(input.sizes),
           colors: this.serializeArray(input.colors),
           images: this.serializeArray(input.images),
+          colorImages: this.serializeColorImages(input.colorImages),
           slug: `${slugify(input.title, { lower: true, strict: true })}-${Date.now().toString(36)}`,
           ...(variants?.length
             ? { variants: { create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock })) } }
@@ -245,6 +270,7 @@ export class ProductService implements OnModuleInit {
       ...(input.sizes ? { sizes: this.serializeArray(input.sizes) } : {}),
       ...(input.colors ? { colors: this.serializeArray(input.colors) } : {}),
       ...(input.images ? { images: this.serializeArray(input.images) } : {}),
+      ...(input.colorImages ? { colorImages: this.serializeColorImages(input.colorImages) } : {}),
       ...(variants
         ? {
             stock: this.aggregateStock(variants, input.stock ?? 0),

@@ -79,20 +79,55 @@ export class OrderService {
   }
 
   async createFromCart(userId: string, input: CreateOrderInput) {
-    // `itemIds` (from the cart page's selection checkboxes) scopes this to
-    // only those rows — always ANDed with `userId` so a caller can never
-    // check out someone else's cart items by passing their ids. Omitted
-    // (the "1-click buy" flow, or checkout reached with nothing selected)
-    // falls back to the whole cart, exactly like before this existed.
-    const cartItemWhere =
-      input.itemIds && input.itemIds.length > 0
-        ? { userId, id: { in: input.itemIds } }
-        : { userId };
+    // `cartItemWhere` stays `null` for a "buy now" purchase — see below,
+    // and see the deleteMany call further down that keys off it too.
+    let cartItemWhere: { userId: string; id?: { in: string[] } } | null = null;
+    // `any[]` (matching adjustInventory's `tx: any` above and the loose
+    // style elsewhere in this file) — the two branches below produce
+    // structurally-identical-enough shapes (productId/size/color/quantity
+    // plus a nested `product` with variants) but come from different Prisma
+    // calls (cartItem.findMany vs. product.findUnique), so a precise shared
+    // type isn't worth fighting for here.
+    let cartItems: any[];
 
-    const cartItems = await this.prisma.cartItem.findMany({
-      where: cartItemWhere,
-      include: { product: { include: { variants: true } } },
-    });
+    if (input.buyNowProductId) {
+      // "Buy now" bypasses the cart table entirely — builds the same shape
+      // the stock-check/order-creation code below expects from a single
+      // direct product lookup instead of a cart query. See
+      // CreateOrderInput.buyNowProductId for why this exists (it replaced
+      // the old addToCart-then-checkout flow, which silently merged
+      // quantities with whatever identical size/color was already in the
+      // cart).
+      const product = await this.prisma.product.findUnique({
+        where: { id: input.buyNowProductId },
+        include: { variants: true },
+      });
+      if (!product) throw new BadRequestException('Mahsulot topilmadi');
+      cartItems = [
+        {
+          productId: product.id,
+          size: input.buyNowSize ?? null,
+          color: input.buyNowColor ?? null,
+          quantity: input.buyNowQuantity ?? 1,
+          product,
+        },
+      ];
+    } else {
+      // `itemIds` (from the cart page's selection checkboxes) scopes this
+      // to only those rows — always ANDed with `userId` so a caller can
+      // never check out someone else's cart items by passing their ids.
+      // Omitted (checkout reached with nothing selected) falls back to the
+      // whole cart, exactly like before `itemIds` existed.
+      cartItemWhere =
+        input.itemIds && input.itemIds.length > 0
+          ? { userId, id: { in: input.itemIds } }
+          : { userId };
+
+      cartItems = await this.prisma.cartItem.findMany({
+        where: cartItemWhere,
+        include: { product: { include: { variants: true } } },
+      });
+    }
 
     if (cartItems.length === 0) throw new BadRequestException('Savatcha bo‘sh');
 
@@ -155,8 +190,12 @@ export class OrderService {
       // Only clears the items that were actually ordered — a partial
       // (selected-items-only) checkout must leave the untouched, unselected
       // cart rows behind for the buyer to check out later, not wipe the
-      // whole cart out from under them.
-      await tx.cartItem.deleteMany({ where: cartItemWhere });
+      // whole cart out from under them. `cartItemWhere` is `null` for a
+      // "buy now" purchase (see above) — that path never touched the cart
+      // table in the first place, so there's nothing to delete here.
+      if (cartItemWhere) {
+        await tx.cartItem.deleteMany({ where: cartItemWhere });
+      }
 
       return created;
     });

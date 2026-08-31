@@ -216,6 +216,10 @@ model Product {
   sizes           String   @default("[]")
   colors          String   @default("[]")
   images          String   @default("[]")
+  // JSON-encoded [{ color, images: string[] }] — per-color product photos
+  // (admin-uploaded). When a color has no entry here (or an empty images
+  // list), the storefront falls back to the general `images` above.
+  colorImages     String   @default("[]")
   isActive        Boolean  @default(true)
   isFeatured      Boolean  @default(false)
   rating          Float    @default(0)

@@ -38,6 +38,18 @@ export class VariantInput {
 }
 
 @InputType()
+export class ColorImagesInput {
+  @Field()
+  @IsString()
+  color: string;
+
+  @Field(() => [String])
+  @IsArray()
+  @IsString({ each: true })
+  images: string[];
+}
+
+@InputType()
 export class CreateProductInput {
   @Field()
   @IsString()
@@ -97,6 +109,15 @@ export class CreateProductInput {
   @Field(() => [String], { defaultValue: [] })
   @IsArray()
   images: string[];
+
+  // Per-color photo sets (optional) — e.g. [{ color: "Ko'k", images: [...] }].
+  // A color with no entry (or an empty images list) here just falls back to
+  // the general `images` list above.
+  @Field(() => [ColorImagesInput], { defaultValue: [] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ColorImagesInput)
+  colorImages: ColorImagesInput[];
 
   // Per size+color stock. Optional: a product with no sizes/colors (e.g. a
   // one-size accessory) can omit this and just use `stock` directly.

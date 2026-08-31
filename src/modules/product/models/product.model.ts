@@ -3,6 +3,7 @@ import { Category } from '../../category/models/category.model';
 import { Brand } from '../../brand/models/brand.model';
 import { Store } from '../../store/models/store.model';
 import { ProductVariant } from './product-variant.model';
+import { ColorImages } from './color-images.model';
 
 @ObjectType()
 export class Product {
@@ -47,6 +48,12 @@ export class Product {
 
   @Field(() => [String])
   images: string[];
+
+  // Rang bo'yicha alohida rasmlar — masalan xaridor "ko'k" rangni tanlasa,
+  // shu rangga admin yuklagan rasmlar ko'rsatiladi. Bo'sh (yoki shu rang
+  // uchun yozuv yo'q) bo'lsa, tepadagi umumiy `images` ishlatiladi.
+  @Field(() => [ColorImages])
+  colorImages: ColorImages[];
 
   // Stock tracked per size+color combination — lets the storefront disable
   // a specific size/color when that exact combo is out of stock, instead
