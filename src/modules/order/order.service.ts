@@ -248,18 +248,38 @@ export class OrderService {
     return { list: list.map((o) => this.mapOrderProducts(o)), total };
   }
 
+  // ROOT-CAUSE FIX for "1 ta buyurtmani otmen qilsam, tovar 2 marta
+  // qo'shilib qolyapti" (cancelling one order restocked the product
+  // TWICE): updateStatus (the status dropdown's cancel/reactivate) and
+  // setPaymentStatus (the paid/unpaid toggle) used to each decide
+  // independently, from their OWN single field, whether stock needed to
+  // move — updateStatus purely off status-just-became/stopped-being
+  // CANCELLED, setPaymentStatus purely off paid-just-became/stopped-true.
+  // Stock only ever actually leaves the shop once (the moment an order is
+  // marked PAID) and only ever needs to come back once — but an admin
+  // doing BOTH actions on the same order (cancel the status, *and* flip
+  // it back to unpaid — a completely reasonable thing to do when
+  // cancelling a paid order) tripped BOTH independent checks, each firing
+  // its own "give the stock back" adjustment for what was really one
+  // single restock event.
+  //
+  // This derives a single combined "is this order's stock currently OUT
+  // of the warehouse" boolean from BOTH fields together — true only while
+  // paid AND not cancelled — so any transition (either field, in either
+  // order) compares that boolean before/after and only moves stock by the
+  // ACTUAL delta. Cancel-then-unpay and unpay-then-cancel both end up
+  // restocking exactly once; a single action on its own behaves exactly
+  // as before (see the two call sites below).
+  private stockIsOut(order: { status: string; paymentStatus: string }): boolean {
+    return order.paymentStatus === PaymentStatus.PAID && order.status !== OrderStatus.CANCELLED;
+  }
+
   async updateStatus(input: UpdateOrderStatusInput) {
     const existing = await this.findById(input.orderId);
-    const wasCancelled = existing.status === OrderStatus.CANCELLED;
-    const willBeCancelled = input.status === OrderStatus.CANCELLED;
+    const wasOut = this.stockIsOut(existing);
+    const willBeOut = this.stockIsOut({ status: input.status, paymentStatus: existing.paymentStatus });
 
-    // Stock only ever left the shop once the order was marked PAID (see
-    // setPaymentStatus) — so cancelling/reactivating an order that was
-    // never paid has nothing to give back or take again. Only a paid
-    // order's cancel/reactivate transition touches inventory.
-    const affectsStock = wasCancelled !== willBeCancelled && existing.paymentStatus === PaymentStatus.PAID;
-
-    if (!affectsStock) {
+    if (wasOut === willBeOut) {
       const order = await this.prisma.order.update({
         where: { id: input.orderId },
         data: { status: input.status },
@@ -269,7 +289,7 @@ export class OrderService {
     }
 
     const order = await this.prisma.$transaction(async (tx) => {
-      await this.adjustInventory(tx, existing.items, willBeCancelled ? 'increase' : 'decrease');
+      await this.adjustInventory(tx, existing.items, wasOut && !willBeOut ? 'increase' : 'decrease');
       return tx.order.update({
         where: { id: input.orderId },
         data: { status: input.status },
@@ -298,8 +318,28 @@ export class OrderService {
 
     if (wasPaid === paid) return existing;
 
+    // See stockIsOut's comment on updateStatus above — this now compares
+    // the same combined (paid AND not-cancelled) boolean instead of
+    // reacting to `paid` alone, so toggling payment on an order that's
+    // ALREADY cancelled (stock already given back by updateStatus) is
+    // correctly a no-op here instead of restocking a second time.
+    const wasOut = this.stockIsOut(existing);
+    const willBeOut = this.stockIsOut({
+      status: existing.status,
+      paymentStatus: paid ? PaymentStatus.PAID : PaymentStatus.PENDING,
+    });
+
+    if (wasOut === willBeOut) {
+      const order = await this.prisma.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: paid ? PaymentStatus.PAID : PaymentStatus.PENDING },
+        include: { items: { include: { product: { include: { variants: true } } } } },
+      });
+      return this.mapOrderProducts(order);
+    }
+
     const order = await this.prisma.$transaction(async (tx) => {
-      await this.adjustInventory(tx, existing.items, paid ? 'decrease' : 'increase');
+      await this.adjustInventory(tx, existing.items, wasOut && !willBeOut ? 'increase' : 'decrease');
       return tx.order.update({
         where: { id: orderId },
         data: { paymentStatus: paid ? PaymentStatus.PAID : PaymentStatus.PENDING },
