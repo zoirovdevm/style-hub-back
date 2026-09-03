@@ -61,6 +61,10 @@ const T: Record<Lang, Record<string, string>> = {
     capped: "Diqqat: omborda buncha yo'q edi, bor-yo'g'i shuncha ayirildi:",
     start: "Assalomu alaykum! 👋\nBu — Wardrobe ombor boti. Magazindan sotilgan tovarni belgilasangiz, saytdagi qoldiqdan avtomatik ayiriladi.\n\nTilni tanlang / Выберите язык:",
     piece: "dona",
+    switchLang: "🌐 Tilni tanlang / Выберите язык:",
+    menuStartDesc: "🏠 Botni qayta boshlash",
+    menuOmborDesc: "📦 Omborni ko'rish (mening tovarlarim)",
+    menuLangDesc: "🌐 Tilni almashtirish",
   },
   ru: {
     enterCode: "🔐 Введите код магазина (код вам даёт админ):",
@@ -86,6 +90,10 @@ const T: Record<Lang, Record<string, string>> = {
     capped: "Внимание: на складе было меньше, списано только:",
     start: "Здравствуйте! 👋\nЭто складской бот Wardrobe. Отметьте проданный товар — остаток на сайте спишется автоматически.\n\nТилни танланг / Выберите язык:",
     piece: "шт",
+    switchLang: "🌐 Tilni tanlang / Выберите язык:",
+    menuStartDesc: "🏠 Перезапустить бота",
+    menuOmborDesc: "📦 Склад (мои товары)",
+    menuLangDesc: "🌐 Сменить язык",
   },
 };
 
@@ -115,13 +123,7 @@ export class StockBotService implements OnModuleInit, OnModuleDestroy {
     this.bot = bot;
 
     bot.start(async (ctx) => {
-      this.sessions.set(ctx.chat.id, { lang: 'uz', step: 'lang' });
-      await ctx.reply(
-        T.uz.start,
-        Markup.inlineKeyboard([
-          [Markup.button.callback("🇺🇿 O'zbekcha", 'lang_uz'), Markup.button.callback('🇷🇺 Русский', 'lang_ru')],
-        ]),
-      );
+      await this.doStart(ctx);
     });
 
     // XAVFSIZLIK: botda magazinlar ro'yxati UMUMAN ko'rsatilmaydi.
@@ -149,6 +151,29 @@ export class StockBotService implements OnModuleInit, OnModuleDestroy {
         await ctx.reply(T[lang].enterCode);
       }
     });
+
+    // Telegram-ning o'zining "Menu" tugmasi (xabar yozish maydonining
+    // chap tomonida) — bosilganda buyruqlar ro'yxatini ko'rsatadi.
+    // /start allaqachon bot.start() orqali ishlaydi; bu yerda faqat
+    // /ombor va /language qo'shiladi va ularning barchasi shu menyuga
+    // chiqishi uchun ro'yxatdan o'tkaziladi.
+    bot.command('ombor', async (ctx) => {
+      await this.openOmbor(ctx);
+    });
+
+    bot.command('language', async (ctx) => {
+      const s = this.session(ctx);
+      const preserved: Partial<Session> = s?.storeId ? { storeId: s.storeId, storeName: s.storeName } : {};
+      this.sessions.set(ctx.chat!.id, { lang: s?.lang ?? 'uz', step: 'lang', ...preserved });
+      await ctx.reply(
+        T.uz.switchLang,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🇺🇿 O'zbekcha", 'lang_uz'), Markup.button.callback('🇷🇺 Русский', 'lang_ru')],
+        ]),
+      );
+    });
+
+    void this.registerMenuCommands(bot);
 
     bot.action(/^prod_(.+)$/, async (ctx) => {
       await ctx.answerCbQuery();
@@ -294,6 +319,73 @@ export class StockBotService implements OnModuleInit, OnModuleDestroy {
 
   private async askRestart(ctx: any) {
     await ctx.reply('/start');
+  }
+
+  // Telegram "Menu" tugmasidagi buyruqlar ro'yxatini o'rnatadi (uz/ru
+  // interfeys tiliga qarab avtomatik moslashadi, qolganlarga uz ko'rinadi).
+  // Xatolik bo'lsa ham botning asosiy oqimiga ta'sir qilmasligi uchun
+  // faqat log yoziladi.
+  private async registerMenuCommands(bot: Telegraf) {
+    const uzCommands = [
+      { command: 'start', description: T.uz.menuStartDesc },
+      { command: 'ombor', description: T.uz.menuOmborDesc },
+      { command: 'language', description: T.uz.menuLangDesc },
+    ];
+    const ruCommands = [
+      { command: 'start', description: T.ru.menuStartDesc },
+      { command: 'ombor', description: T.ru.menuOmborDesc },
+      { command: 'language', description: T.ru.menuLangDesc },
+    ];
+    try {
+      await bot.telegram.setMyCommands(uzCommands);
+      await bot.telegram.setMyCommands(uzCommands, { language_code: 'uz' });
+      await bot.telegram.setMyCommands(ruCommands, { language_code: 'ru' });
+    } catch (e) {
+      this.logger.warn(`Bot menyusini o'rnatib bo'lmadi: ${(e as Error).message}`);
+    }
+  }
+
+  private async doStart(ctx: any) {
+    this.sessions.set(ctx.chat.id, { lang: 'uz', step: 'lang' });
+    await ctx.reply(
+      T.uz.start,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🇺🇿 O'zbekcha", 'lang_uz'), Markup.button.callback('🇷🇺 Русский', 'lang_ru')],
+      ]),
+    );
+  }
+
+  // "📦 Ombor" doimiy menyu tugmasi: agar bu Telegram akkaunt allaqachon
+  // biror magazinga biriktirilgan bo'lsa (hozirgi sessiyada yoki avval
+  // kod kiritilgani DB'da saqlangan bo'lsa — bot qayta ishga tushgan
+  // bo'lsa ham), to'g'ridan-to'g'ri O'ZINING tovarlarini ko'rsatadi.
+  // Aks holda magazin kodini so'raydi (auth oqimi o'zgarmagan).
+  private async openOmbor(ctx: any) {
+    const existing = this.session(ctx);
+    const lang = existing?.lang ?? 'uz';
+    let storeId = existing?.storeId;
+    let storeName = existing?.storeName;
+
+    if (!storeId) {
+      const link = await this.prisma.telegramStoreLink.findUnique({
+        where: { telegramUserId: String(ctx.from!.id) },
+        include: { store: true },
+      });
+      if (link) {
+        storeId = link.store.id;
+        storeName = link.store.name;
+      }
+    }
+
+    if (!storeId) {
+      this.sessions.set(ctx.chat!.id, { lang, step: 'auth' });
+      await ctx.reply(T[lang].enterCode);
+      return;
+    }
+
+    const s: Session = { lang, step: 'product', storeId, storeName };
+    this.sessions.set(ctx.chat!.id, s);
+    await this.showProducts(ctx, s);
   }
 
   private async showProducts(ctx: any, s: Session) {
