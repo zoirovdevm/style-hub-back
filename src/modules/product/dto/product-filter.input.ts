@@ -1,5 +1,6 @@
 import { InputType, Field, Int, Float, registerEnumType } from '@nestjs/graphql';
-import { IsOptional, IsInt, IsString, Min, IsArray } from 'class-validator';
+import { IsOptional, IsInt, IsString, Min, IsArray, IsEnum } from 'class-validator';
+import { Gender } from '../../../common/enums/gender.enum';
 
 export enum ProductSort {
   NEWEST = 'NEWEST',
@@ -49,6 +50,11 @@ export class ProductFilterInput {
   @Field({ nullable: true })
   @IsOptional()
   onlyFeatured?: boolean;
+
+  @Field(() => Gender, { nullable: true })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
 
   @Field(() => ProductSort, { defaultValue: ProductSort.NEWEST })
   @IsOptional()

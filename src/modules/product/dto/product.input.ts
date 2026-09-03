@@ -2,6 +2,7 @@ import { InputType, Field, ID, Int, Float, PartialType } from '@nestjs/graphql';
 import {
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { Gender } from '../../../common/enums/gender.enum';
 
 // The admin "add product" form's <select> for an optional relation (brand)
 // naturally submits an empty string when nothing is picked. class-validator's
@@ -151,6 +153,14 @@ export class CreateProductInput {
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;
+
+  // Kimga mo'ljallangan: Erkaklar/Ayollar/Unisex. Admin hech narsa
+  // tanlamasa ham UNISEX bilan yaratiladi — ProductForm'da select har doim
+  // shu qiymat bilan default holatda keladi.
+  @Field(() => Gender, { defaultValue: Gender.UNISEX })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
 }
 
 @InputType()

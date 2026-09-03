@@ -220,6 +220,10 @@ model Product {
   // (admin-uploaded). When a color has no entry here (or an empty images
   // list), the storefront falls back to the general `images` above.
   colorImages     String   @default("[]")
+  // Kimga mo'ljallangan: MALE / FEMALE / UNISEX (src/common/enums/gender.enum.ts).
+  // Mavjud tovarlar UNISEX bilan boshlanadi — admin xohlaganini keyin
+  // Erkaklar/Ayollar'ga qayta belgilaydi.
+  gender          String   @default("UNISEX")
   isActive        Boolean  @default(true)
   isFeatured      Boolean  @default(false)
   rating          Float    @default(0)

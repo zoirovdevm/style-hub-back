@@ -4,6 +4,7 @@ import { Brand } from '../../brand/models/brand.model';
 import { Store } from '../../store/models/store.model';
 import { ProductVariant } from './product-variant.model';
 import { ColorImages } from './color-images.model';
+import { Gender } from '../../../common/enums/gender.enum';
 
 @ObjectType()
 export class Product {
@@ -60,6 +61,9 @@ export class Product {
   // of only knowing the overall total in `stock`.
   @Field(() => [ProductVariant])
   variants: ProductVariant[];
+
+  @Field(() => Gender)
+  gender: string;
 
   @Field()
   isActive: boolean;

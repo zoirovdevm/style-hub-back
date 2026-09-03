@@ -3,6 +3,7 @@ import slugify from 'slugify';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductInput, UpdateProductInput, VariantInput } from './dto/product.input';
 import { ProductFilterInput, ProductSort } from './dto/product-filter.input';
+import { Gender } from '../../common/enums/gender.enum';
 
 const PRODUCT_INCLUDE = { category: true, brand: true, store: true, variants: true } as const;
 
@@ -136,6 +137,13 @@ export class ProductService implements OnModuleInit {
     if (filter.categorySlug) where.category = { slug: filter.categorySlug };
     if (filter.brandSlug) where.brand = { slug: filter.brandSlug };
     if (filter.onlyFeatured) where.isFeatured = true;
+    // MALE/FEMALE tanlansa ham UNISEX (hali qayta belgilanmagan) tovarlar
+    // ro'yxatdan tushib qolmasin — aks holda admin har birini qo'lda
+    // Erkaklar/Ayollar'ga belgilamaguncha "Erkaklar"/"Ayollar" bo'limi
+    // deyarli bo'sh ko'rinardi. UNISEX filtri esa aynan shuni so'raydi.
+    if (filter.gender) {
+      where.gender = filter.gender === Gender.UNISEX ? Gender.UNISEX : { in: [filter.gender, Gender.UNISEX] };
+    }
 
     // sizes/colors are JSON-encoded strings like ["S","M","L"] — matching
     // the quoted form avoids "S" incorrectly matching inside "XS".
