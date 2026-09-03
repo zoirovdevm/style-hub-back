@@ -279,10 +279,22 @@ export class OrderService {
     const wasOut = this.stockIsOut(existing);
     const willBeOut = this.stockIsOut({ status: input.status, paymentStatus: existing.paymentStatus });
 
+    // Buyurtma BEKOR qilinganda, agar u avval to'langan bo'lsa, to'lov
+    // holati ham avtomatik "to'lanmagan"ga qaytariladi — aks holda
+    // bekor qilingan buyurtma hali ham "to'langan" bo'lib ko'rinaverar edi
+    // (admin buni alohida, qo'lda o'zgartirishi kerak bo'lardi). Faqat
+    // PAID → PENDING uchun: FAILED (chek rad etilgan) holatiga tegilmaydi —
+    // bu alohida, ataylab bosilgan qaror, bekor qilish uni yashirmasligi
+    // kerak.
+    const resetPayment = input.status === OrderStatus.CANCELLED && existing.paymentStatus === PaymentStatus.PAID;
+
     if (wasOut === willBeOut) {
       const order = await this.prisma.order.update({
         where: { id: input.orderId },
-        data: { status: input.status },
+        data: {
+          status: input.status,
+          ...(resetPayment ? { paymentStatus: PaymentStatus.PENDING } : {}),
+        },
         include: { items: { include: { product: { include: { variants: true } } } } },
       });
       return this.mapOrderProducts(order);
@@ -292,7 +304,10 @@ export class OrderService {
       await this.adjustInventory(tx, existing.items, wasOut && !willBeOut ? 'increase' : 'decrease');
       return tx.order.update({
         where: { id: input.orderId },
-        data: { status: input.status },
+        data: {
+          status: input.status,
+          ...(resetPayment ? { paymentStatus: PaymentStatus.PENDING } : {}),
+        },
         include: { items: { include: { product: { include: { variants: true } } } } },
       });
     });
