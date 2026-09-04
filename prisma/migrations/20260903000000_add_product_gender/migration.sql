@@ -1,2 +1,6 @@
--- AlterTable
-ALTER TABLE "products" ADD COLUMN "gender" TEXT NOT NULL DEFAULT 'UNISEX';
+-- Bu migratsiya bekor qilindi: "gender" avval Product'dagi qattiq
+-- belgilangan (enum) maydon sifatida rejalashtirilgan edi, lekin keyinroq
+-- Brend kabi to'liq admin boshqaradigan alohida jadvalga (Gender modeli)
+-- almashtirildi — pastdagi 20260904000000_add_genders migratsiyasiga
+-- qarang. Bu fayl hech qachon serverga qo'llanmagan edi, shuning uchun
+-- bo'sh qoldirish xavfsiz — bazada ortiqcha ustun qolib ketmasligi uchun.

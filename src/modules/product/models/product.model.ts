@@ -4,7 +4,7 @@ import { Brand } from '../../brand/models/brand.model';
 import { Store } from '../../store/models/store.model';
 import { ProductVariant } from './product-variant.model';
 import { ColorImages } from './color-images.model';
-import { Gender } from '../../../common/enums/gender.enum';
+import { Gender } from '../../gender/models/gender.model';
 
 @ObjectType()
 export class Product {
@@ -62,9 +62,6 @@ export class Product {
   @Field(() => [ProductVariant])
   variants: ProductVariant[];
 
-  @Field(() => Gender)
-  gender: string;
-
   @Field()
   isActive: boolean;
 
@@ -108,4 +105,12 @@ export class Product {
 
   @Field(() => Store, { nullable: true })
   store?: Store;
+
+  // Erkaklar/Ayollar va h.k. — Brend bilan bir xil ixtiyoriy admin-boshqaruvli
+  // yorliq (Gender modeliga qarang), qattiq belgilangan qiymatlar emas.
+  @Field(() => ID, { nullable: true })
+  genderId?: string;
+
+  @Field(() => Gender, { nullable: true })
+  gender?: Gender;
 }

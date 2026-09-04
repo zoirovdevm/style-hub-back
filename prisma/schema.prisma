@@ -220,10 +220,6 @@ model Product {
   // (admin-uploaded). When a color has no entry here (or an empty images
   // list), the storefront falls back to the general `images` above.
   colorImages     String   @default("[]")
-  // Kimga mo'ljallangan: MALE / FEMALE / UNISEX (src/common/enums/gender.enum.ts).
-  // Mavjud tovarlar UNISEX bilan boshlanadi — admin xohlaganini keyin
-  // Erkaklar/Ayollar'ga qayta belgilaydi.
-  gender          String   @default("UNISEX")
   isActive        Boolean  @default(true)
   isFeatured      Boolean  @default(false)
   rating          Float    @default(0)
@@ -243,6 +239,13 @@ model Product {
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
 
+  // Erkaklar/Ayollar/va hokazo — Brend kabi admin o'zi admin paneldan
+  // yaratadigan va tovarga biriktiradigan ixtiyoriy yorliq (Gender modeliga
+  // qarang). Qattiq belgilangan qiymatlar emas — admin xohlagan nomni
+  // qo'shishi mumkin.
+  genderId String?
+  gender   Gender? @relation(fields: [genderId], references: [id])
+
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
   orderItems    OrderItem[]
@@ -253,7 +256,24 @@ model Product {
   @@index([categoryId])
   @@index([brandId])
   @@index([storeId])
+  @@index([genderId])
   @@map("products")
+}
+
+// Brend bilan bir xil g'oya: admin panelda o'zi nom kiritib yaratadi
+// (masalan "Erkaklar", "Ayollar" — yoki xohlagan boshqa nomni), keyin
+// tovar qo'shish/tahrirlash formasida shu ro'yxatdan tanlaydi. Qattiq
+// belgilangan enum emas — to'liq admin nazoratida.
+model Gender {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("genders")
 }
 
 // Buyer reviews (otziv) — a star rating + comment + an optional photo the
