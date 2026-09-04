@@ -267,6 +267,11 @@ model Product {
 model Gender {
   id        String   @id @default(uuid())
   name      String   @unique
+  // Ruscha nomi — Category'dagi bilan bir xil, ixtiyoriy: admin faqat
+  // o'zbekcha nom kiritsa ham bo'ladi, keyin xohlasa ruscha tarjimasini
+  // qo'shadi. Ruscha sahifalarda shu maydon bo'lsa o'sha ko'rsatiladi,
+  // bo'lmasa `name`ga qaytiladi.
+  nameRu    String?
   slug      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

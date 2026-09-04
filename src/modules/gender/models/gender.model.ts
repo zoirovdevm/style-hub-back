@@ -8,6 +8,9 @@ export class Gender {
   @Field()
   name: string;
 
+  @Field({ nullable: true })
+  nameRu?: string;
+
   @Field()
   slug: string;
 

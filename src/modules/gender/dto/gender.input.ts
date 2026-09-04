@@ -1,5 +1,5 @@
 import { InputType, Field, PartialType } from '@nestjs/graphql';
-import { IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString, MinLength } from 'class-validator';
 
 @InputType()
 export class CreateGenderInput {
@@ -7,6 +7,11 @@ export class CreateGenderInput {
   @IsString()
   @MinLength(2)
   name: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  nameRu?: string;
 }
 
 @InputType()
