@@ -47,4 +47,15 @@ export class UserResolver {
     }
     return this.userService.setActive(id, isActive);
   }
+
+  @Mutation(() => Boolean)
+  @Roles(Role.ADMIN)
+  removeUser(@CurrentUser() currentUser: User, @Args('id', { type: () => ID }) id: string) {
+    // setUserActive bilan bir xil himoya: admin o'zini o'zi o'chirib
+    // qo'ymasin — aks holda hisobiga qaytadan kira olmay qoladi.
+    if (id === currentUser.id) {
+      throw new BadRequestException("O'zingizni o'chira olmaysiz");
+    }
+    return this.userService.remove(id);
+  }
 }

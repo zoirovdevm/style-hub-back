@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateProfileInput } from './dto/update-profile.input';
 import { UsersFilterInput } from './dto/users-filter.input';
@@ -61,6 +61,35 @@ export class UserService {
   async setActive(id: string, isActive: boolean) {
     await this.findById(id); // 404s if the id doesn't exist
     return this.prisma.user.update({ where: { id }, data: { isActive } });
+  }
+
+  // Butunlay o'chirish — blokdan farqli o'laroq, bu foydalanuvchini bazadan
+  // butunlay olib tashlaydi, shuning uchun uning telefon raqami/email'i
+  // darhol bo'shab qoladi va o'sha raqam/email bilan qaytadan ro'yxatdan
+  // o'tish mumkin bo'ladi (blok esa qatorni bazada saqlab qolgani uchun
+  // unique cheklov hali ham band bo'lib turaverar edi).
+  //
+  // Savat/sevimlilar/sharhlar avtomatik o'chadi (schema.prisma'da shu
+  // relationlar uchun onDelete: Cascade bor). Lekin buyurtmalar (Order)
+  // ataylab cascade qilinmagan — bitta buyurtma qilgan haqiqiy xaridorni
+  // o'chirish butun buyurtma tarixini yo'qotib yubormasligi kerak. Shuning
+  // uchun buyurtma tarixi bor foydalanuvchini o'chirishga urinish
+  // tushunarli xabar bilan rad etiladi (xuddi hardDeleteProduct'dagi kabi)
+  // — bunday hollarda admin blok qilishda davom etishi kerak.
+  async remove(id: string): Promise<boolean> {
+    await this.findById(id);
+    try {
+      await this.prisma.user.delete({ where: { id } });
+      return true;
+    } catch (error) {
+      const e = error as { code?: string };
+      if (e?.code === 'P2003' || e?.code === 'P2014') {
+        throw new BadRequestException(
+          "Bu foydalanuvchi buyurtma tarixiga ega, shuning uchun butunlay o'chirib bo'lmaydi. Uni bloklashingiz mumkin.",
+        );
+      }
+      throw error;
+    }
   }
 
   countAll() {
