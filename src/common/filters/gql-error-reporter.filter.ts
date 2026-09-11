@@ -6,14 +6,15 @@ import { TelegramService } from '../../modules/telegram/telegram.service';
 // (GraphQL resolverlar HAM, PaymentController/UploadController kabi oddiy
 // HTTP controllerlar HAM) throw qilingan HAR QANDAY istisnodan o'tadi.
 //
-// Lekin Telegram'ga faqat HAQIQIY server xatoliklari (kutilmagan bug'lar —
-// TypeError, Prisma xatoligi va h.k. — yoki 500+ status kodli
-// HttpException) yuboriladi. Oddiy, kutilgan foydalanuvchi xatoliklari
-// (BadRequestException — "parol xato", "bu raqam band", ForbiddenException,
-// NotFoundException, ThrottlerException va h.k. — odatda 4xx status)
-// ATAYLAB chiqarib tashlangan: aks holda har bir noto'g'ri parol yoki
-// validatsiya xatoligi ham botga kelib, adminning Telegram'ini foydasiz
-// xabarlar bilan to'ldirib yuborar edi.
+// Telegram'ga HAMMASI yuboriladi — 404 "topilmadi" (NotFoundException,
+// yoki mavjud bo'lmagan URL'ga so'rov), boshqa 4xx (400 validatsiya,
+// 401/403, 429 throttling), 500+ va kutilmagan bug'lar (TypeError, Prisma
+// xatoligi va h.k.). So'rov bo'yicha shunday: 404 ham ko'rinishi kerak.
+// Spamdan himoya — TelegramService.notifyServerError ichidagi cooldown:
+// bir xil (joy + kod + matn) xatolik 5 daqiqada faqat BIR marta yuboriladi,
+// shuning uchun masalan bitta buzilgan rasm URL'iga 500 marta so'rov kelsa
+// ham chatga 1 ta xabar tushadi. Xabar boshidagi belgi kodga qarab farq
+// qiladi (🔴 500+, 🟡 4xx) — chatda bir qarashda ajralib turadi.
 //
 // GraphQL/HTTP javobining o'zi (frontend qanday xato ko'rishi) bu filter
 // tufayli HECH QANDAY o'zgarmaydi — `catch()` xatolikni Telegram'ga yuborib,
@@ -26,24 +27,23 @@ export class GqlErrorReporterFilter implements ExceptionFilter, GqlExceptionFilt
   constructor(private readonly telegramService: TelegramService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
-    this.reportIfServerError(exception, host);
+    this.report(exception, host);
     // Asl xatolikni o'zgarishsiz qaytaradi — bu filter faqat "yon effekt"
     // (Telegram xabari) qo'shadi, javobning shaklini o'zgartirmaydi.
     return exception;
   }
 
-  private reportIfServerError(exception: unknown, host: ArgumentsHost) {
-    const isHttpException = exception instanceof HttpException;
-    const status = isHttpException ? (exception as HttpException).getStatus() : 500;
-    if (isHttpException && status < 500) return;
-
+  private report(exception: unknown, host: ArgumentsHost) {
+    // HttpException bo'lsa uning haqiqiy kodi (404, 400, 429...), aks holda
+    // — kutilmagan bug — 500 deb hisoblanadi.
+    const status = exception instanceof HttpException ? exception.getStatus() : 500;
     const context = this.resolveContext(host);
     const error = exception instanceof Error ? exception : new Error(String(exception));
 
     // Fire-and-forget — Telegram'ga yuborish sekinlashsa yoki
     // muvaffaqiyatsiz bo'lsa ham, bu asl GraphQL/HTTP javobini
     // SEKINLASHTIRMASLIGI yoki TO'XTATMASLIGI kerak.
-    this.telegramService.notifyServerError(context, error).catch((sendError) => {
+    this.telegramService.notifyServerError(context, error, status).catch((sendError) => {
       this.logger.error(`Xatolik haqidagi Telegram xabari yuborilmadi: ${(sendError as Error).message}`);
     });
   }

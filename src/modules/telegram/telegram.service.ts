@@ -94,6 +94,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   // Faqat xabar YUBORISH uchun ishlatiladi (admindan javob kutmaydi), shu
   // sababli launch()/polling shart emas — 409-conflict xavfi ham yo'q.
   private supportBot: Telegraf | null = null;
+  // Xatoliklar uchun ALOHIDA bot (TELEGRAM_ERROR_BOT_TOKEN) — supportBot
+  // bilan bir xil naqsh: faqat sendMessage uchun, launch() qilinmaydi, shu
+  // sababli to'lov botiga ta'sir qilmaydi va 409-conflict xavfi yo'q.
+  // Sozlanmagan bo'lsa xatoliklar to'lov botiga (`bot`) boradi.
+  private errorBot: Telegraf | null = null;
+  private errorChatId = '';
   // Bir xil xatolik qisqa vaqt ichida qayta-qayta yuz bersa (masalan doimiy
   // bug tufayli DEYARLI HAR bir so'rovda bir xil xato qaytsa — bunday holat
   // avval "trust proxy" xatoligida chindan ham yuz bergan), Telegram'ni
@@ -112,6 +118,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     const token = this.config.get<string>('telegram.botToken');
     this.adminChatId = this.config.get<string>('telegram.adminChatId') ?? '';
+    this.errorChatId = this.config.get<string>('telegram.errorChatId') ?? '';
+
+    // Xatoliklar boti to'lov botidan MUSTAQIL sozlanadi — to'lov boti
+    // umuman sozlanmagan bo'lsa ham (pastdagi `return`), xatoliklar
+    // alohida bot orqali kelaverishi kerak.
+    const errorToken = this.config.get<string>('telegram.errorBotToken');
+    if (errorToken) {
+      this.errorBot = new Telegraf(errorToken);
+      this.logger.log('Xatoliklar uchun alohida bot sozlandi.');
+    } else {
+      this.logger.warn(
+        "TELEGRAM_ERROR_BOT_TOKEN bo'sh — server xatoliklari hozircha to'lov botiga boradi.",
+      );
+    }
 
     if (!token) {
       this.logger.warn(
@@ -192,21 +212,26 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // Backenddagi HAR QANDAY kutilmagan server xatoligi (bug — TypeError,
-  // Prisma xatoligi, va h.k. — yoki 500+ status kodli HttpException) shu
-  // metod orqali to'g'ridan-to'g'ri admin chatiga (to'lov botining o'zi
-  // orqali — alohida yangi bot ochish shart emas, chunki TELEGRAM_BOT_TOKEN
-  // va TELEGRAM_ADMIN_CHAT_ID allaqachon sozlangan va ishlayapti) yuboriladi
-  // — chaqiruvchi tomon GqlErrorReporterFilter (common/filters). Oddiy,
-  // kutilgan foydalanuvchi xatoliklari (noto'g'ri parol, validatsiya va h.k.
-  // — 4xx) bu yerga UMUMAN kelmaydi, filter darajasida ajratib tashlanadi.
-  // Bot sozlanmagan bo'lsa (development muhitida ko'pincha shunday) —
-  // jim o'tkazib yuboriladi, faqat serverning o'z logiga yoziladi (buni
-  // chaqiruvchi filter allaqachon qiladi).
-  async notifyServerError(context: string, error: Error) {
-    if (!this.bot || !this.adminChatId) return;
+  // Backenddagi HAR QANDAY xatolik — 404 "topilmadi", boshqa 4xx, 500
+  // server xatoligi, kutilmagan bug (TypeError, Prisma xatoligi va h.k.) —
+  // shu metod orqali Telegram'ga yuboriladi; chaqiruvchi tomon
+  // GqlErrorReporterFilter (common/filters). Alohida xatoliklar boti
+  // (TELEGRAM_ERROR_BOT_TOKEN) sozlangan bo'lsa o'sha orqali va
+  // TELEGRAM_ERROR_CHAT_ID'ga (bo'sh bo'lsa admin chatiga) boradi — to'lov/
+  // yordam xabarlariga aralashmaydi. Sozlanmagan bo'lsa to'lov botiga
+  // tushadi. Hech qaysi bot yo'q bo'lsa (development'da ko'pincha shunday)
+  // jim o'tkazib yuboriladi — serverning o'z logiga baribir yoziladi.
+  //
+  // `status` — HttpException'ning kodi (404, 400, 500...), kutilmagan
+  // bug'lar uchun 500. Xabarning boshidagi belgi shunga qarab: 🔴 server
+  // xatoligi (500+), 🟡 mijoz/so'rov xatoligi (4xx) — chatda bir qarashda
+  // ajralib turishi uchun.
+  async notifyServerError(context: string, error: Error, status = 500) {
+    const bot = this.errorBot ?? this.bot;
+    const chatId = this.errorChatId || this.adminChatId;
+    if (!bot || !chatId) return;
 
-    const key = `${context}::${error.message}`;
+    const key = `${context}::${status}::${error.message}`;
     const now = Date.now();
     const lastSent = this.recentErrorSends.get(key);
     if (lastSent && now - lastSent < TelegramService.ERROR_COOLDOWN_MS) return;
@@ -221,13 +246,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const stackSnippet = (error.stack ?? '').split('\n').slice(0, 6).join('\n');
+    const isServerError = status >= 500;
     const time = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+    // Stack trace faqat haqiqiy server xatoliklari (bug) uchun foydali —
+    // 404/400 kabi kutilgan xatoliklarda u shunchaki NestJS ichki
+    // qatorlarini ko'rsatib, xabarni cho'zib yuboradi.
+    const stackSnippet = isServerError ? (error.stack ?? '').split('\n').slice(0, 6).join('\n') : '';
     const text =
-      `🔴 Server xatoligi\n` +
+      `${isServerError ? '🔴 Server xatoligi' : '🟡 So\'rov xatoligi'}\n` +
+      `Kod: ${status} ${TelegramService.statusLabel(status)}\n` +
       `Joy: ${context}\n` +
       `Vaqt: ${time}\n\n` +
-      `${error.message}\n\n${stackSnippet}`;
+      `${error.message}` +
+      (stackSnippet ? `\n\n${stackSnippet}` : '');
 
     try {
       // parse_mode ATAYLAB berilmagan — stack trace ichida Markdown'ni
@@ -235,10 +266,27 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       // o'zini "can't parse entities" xatoligi bilan muvaffaqiyatsiz
       // qilib qo'yardi (aynan xatolik haqida xabar berish uchun yuborilgan
       // so'rovning o'zi navbatdagi xatolikka aylanib qolishi kulgili bo'lardi).
-      await this.bot.telegram.sendMessage(this.adminChatId, text.slice(0, 4000));
+      await bot.telegram.sendMessage(chatId, text.slice(0, 4000));
     } catch (sendError) {
       this.logger.error(`Xatolik haqidagi Telegram xabari yuborilmadi: ${(sendError as Error).message}`);
     }
+  }
+
+  // Telegram xabarida status kodining yonida qisqa, tushunarli nom —
+  // "404 (Not Found)" kabi.
+  private static statusLabel(status: number): string {
+    const labels: Record<number, string> = {
+      400: '(Bad Request)',
+      401: '(Unauthorized)',
+      403: '(Forbidden)',
+      404: '(Not Found)',
+      409: '(Conflict)',
+      429: '(Too Many Requests)',
+      500: '(Internal Server Error)',
+      502: '(Bad Gateway)',
+      503: '(Service Unavailable)',
+    };
+    return labels[status] ?? '';
   }
 
   private registerHandlers(bot: Telegraf) {

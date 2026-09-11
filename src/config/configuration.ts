@@ -78,5 +78,11 @@ export default () => ({
     // (TELEGRAM_BOT_TOKEN) ajratilgan holda. Bo'sh qoldirilsa, eski
     // xatti-harakat davom etadi — xabarlar to'lov botiga boradi.
     supportBotToken: process.env.TELEGRAM_SUPPORT_BOT_TOKEN ?? '',
+    // Xatoliklar uchun alohida bot — serverdagi har qanday xatolik
+    // (404/500/bug) shu bot orqali, to'lov va yordam botlaridan AJRATILGAN
+    // chatga boradi. Ikkalasi ham ixtiyoriy: token bo'sh bo'lsa to'lov boti
+    // ishlatiladi, chat ID bo'sh bo'lsa TELEGRAM_ADMIN_CHAT_ID ishlatiladi.
+    errorBotToken: process.env.TELEGRAM_ERROR_BOT_TOKEN ?? '',
+    errorChatId: process.env.TELEGRAM_ERROR_CHAT_ID ?? '',
   },
 });
