@@ -94,6 +94,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   // Faqat xabar YUBORISH uchun ishlatiladi (admindan javob kutmaydi), shu
   // sababli launch()/polling shart emas — 409-conflict xavfi ham yo'q.
   private supportBot: Telegraf | null = null;
+  // Bir xil xatolik qisqa vaqt ichida qayta-qayta yuz bersa (masalan doimiy
+  // bug tufayli DEYARLI HAR bir so'rovda bir xil xato qaytsa — bunday holat
+  // avval "trust proxy" xatoligida chindan ham yuz bergan), Telegram'ni
+  // minglab bir xil xabar bilan to'ldirib yubormaslik uchun — xuddi shu
+  // (joy + xabar matni) xatolik so'nggi ERROR_COOLDOWN_MS ichida
+  // allaqachon yuborilgan bo'lsa, qayta yuborilmaydi.
+  private readonly recentErrorSends = new Map<string, number>();
+  private static readonly ERROR_COOLDOWN_MS = 5 * 60 * 1000; // 5 daqiqa
 
   constructor(
     private readonly config: ConfigService,
@@ -181,6 +189,55 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await this.bot.telegram.sendMessage(order.telegramChatId, text);
     } catch (error) {
       this.logger.error(`Xaridorga to'lov xabari yuborilmadi (buyurtma #${order.orderNumber}): ${(error as Error).message}`);
+    }
+  }
+
+  // Backenddagi HAR QANDAY kutilmagan server xatoligi (bug — TypeError,
+  // Prisma xatoligi, va h.k. — yoki 500+ status kodli HttpException) shu
+  // metod orqali to'g'ridan-to'g'ri admin chatiga (to'lov botining o'zi
+  // orqali — alohida yangi bot ochish shart emas, chunki TELEGRAM_BOT_TOKEN
+  // va TELEGRAM_ADMIN_CHAT_ID allaqachon sozlangan va ishlayapti) yuboriladi
+  // — chaqiruvchi tomon GqlErrorReporterFilter (common/filters). Oddiy,
+  // kutilgan foydalanuvchi xatoliklari (noto'g'ri parol, validatsiya va h.k.
+  // — 4xx) bu yerga UMUMAN kelmaydi, filter darajasida ajratib tashlanadi.
+  // Bot sozlanmagan bo'lsa (development muhitida ko'pincha shunday) —
+  // jim o'tkazib yuboriladi, faqat serverning o'z logiga yoziladi (buni
+  // chaqiruvchi filter allaqachon qiladi).
+  async notifyServerError(context: string, error: Error) {
+    if (!this.bot || !this.adminChatId) return;
+
+    const key = `${context}::${error.message}`;
+    const now = Date.now();
+    const lastSent = this.recentErrorSends.get(key);
+    if (lastSent && now - lastSent < TelegramService.ERROR_COOLDOWN_MS) return;
+    this.recentErrorSends.set(key, now);
+    // Xotira cheksiz o'sib ketmasligi uchun vaqti-vaqti bilan eskirgan
+    // yozuvlarni tozalab turadi — alohida timer shart emas, shu metod
+    // chaqirilganda birga bajariladi.
+    if (this.recentErrorSends.size > 200) {
+      const cutoff = now - TelegramService.ERROR_COOLDOWN_MS;
+      for (const [k, t] of this.recentErrorSends) {
+        if (t < cutoff) this.recentErrorSends.delete(k);
+      }
+    }
+
+    const stackSnippet = (error.stack ?? '').split('\n').slice(0, 6).join('\n');
+    const time = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+    const text =
+      `🔴 Server xatoligi\n` +
+      `Joy: ${context}\n` +
+      `Vaqt: ${time}\n\n` +
+      `${error.message}\n\n${stackSnippet}`;
+
+    try {
+      // parse_mode ATAYLAB berilmagan — stack trace ichida Markdown'ni
+      // buzadigan belgilar (_, *, `) bo'lishi mumkin, bu esa sendMessage'ning
+      // o'zini "can't parse entities" xatoligi bilan muvaffaqiyatsiz
+      // qilib qo'yardi (aynan xatolik haqida xabar berish uchun yuborilgan
+      // so'rovning o'zi navbatdagi xatolikka aylanib qolishi kulgili bo'lardi).
+      await this.bot.telegram.sendMessage(this.adminChatId, text.slice(0, 4000));
+    } catch (sendError) {
+      this.logger.error(`Xatolik haqidagi Telegram xabari yuborilmadi: ${(sendError as Error).message}`);
     }
   }
 

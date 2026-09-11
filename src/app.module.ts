@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
@@ -7,6 +7,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import configuration from './config/configuration';
 import { GqlThrottlerGuard } from './common/guards/gql-throttler.guard';
+import { GqlErrorReporterFilter } from './common/filters/gql-error-reporter.filter';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -80,6 +81,16 @@ import { StockBotModule } from './modules/stock-bot/stock-bot.module';
     StoreModule,
     StockBotModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: GqlThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: GqlThrottlerGuard },
+    // Serverda qanaqadur kutilmagan xatolik (bug) chiqsa — Telegram'dagi
+    // to'lov botiga (admin chatiga) avtomatik xabar keladi. Qayerda va
+    // qanaqa xatolik ekani (GraphQL field yoki HTTP route, xabar matni,
+    // stack trace'ning bir qismi) shu xabarda ko'rsatiladi — TelegramModule
+    // yuqorida import qilingan (GqlErrorReporterFilter TelegramService'ga
+    // muhtoj). Batafsili: common/filters/gql-error-reporter.filter.ts va
+    // modules/telegram/telegram.service.ts (notifyServerError).
+    { provide: APP_FILTER, useClass: GqlErrorReporterFilter },
+  ],
 })
 export class AppModule {}
