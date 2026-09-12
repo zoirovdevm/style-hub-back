@@ -6,20 +6,39 @@ import { TelegramService } from '../../modules/telegram/telegram.service';
 // (GraphQL resolverlar HAM, PaymentController/UploadController kabi oddiy
 // HTTP controllerlar HAM) throw qilingan HAR QANDAY istisnodan o'tadi.
 //
-// Telegram'ga HAMMASI yuboriladi — 404 "topilmadi" (NotFoundException,
-// yoki mavjud bo'lmagan URL'ga so'rov), boshqa 4xx (400 validatsiya,
-// 401/403, 429 throttling), 500+ va kutilmagan bug'lar (TypeError, Prisma
-// xatoligi va h.k.). So'rov bo'yicha shunday: 404 ham ko'rinishi kerak.
-// Spamdan himoya — TelegramService.notifyServerError ichidagi cooldown:
-// bir xil (joy + kod + matn) xatolik 5 daqiqada faqat BIR marta yuboriladi,
-// shuning uchun masalan bitta buzilgan rasm URL'iga 500 marta so'rov kelsa
-// ham chatga 1 ta xabar tushadi. Xabar boshidagi belgi kodga qarab farq
-// qiladi (🔴 500+, 🟡 4xx) — chatda bir qarashda ajralib turadi.
+// Telegram'ga 404 ("topilmadi" — buzilgan havola belgisi), 500+ (server
+// xatoligi) va kutilmagan bug'lar (TypeError, Prisma xatoligi va h.k.)
+// yuboriladi. Spamdan himoya — TelegramService.notifyServerError ichidagi
+// cooldown: bir xil (joy + kod + matn) xatolik 5 daqiqada faqat BIR marta
+// yuboriladi. Xabar boshidagi belgi kodga qarab farq qiladi (🔴 500+,
+// 🟡 4xx) — chatda bir qarashda ajralib turadi.
 //
 // GraphQL/HTTP javobining o'zi (frontend qanday xato ko'rishi) bu filter
 // tufayli HECH QANDAY o'zgarmaydi — `catch()` xatolikni Telegram'ga yuborib,
 // keyin AYNAN o'zgarishsiz qaytaradi, shuning uchun mavjud xato-formatlash
 // xulq-atvori (Apollo/NestJS default) butunlay saqlanib qoladi.
+
+// Bu kodlar Telegram'ga YUBORILMAYDI. Ular "xatolik" deb atalsa ham,
+// aslida ilovaning NORMAL ishlashi — tuzatish kerak bo'lgan narsa emas.
+// Boshida hammasi yuborilardi va natijada chat foydasiz xabarlar bilan
+// to'lib ketdi (ayniqsa 401 Query.myCart — pastdagi izohga qarang).
+//
+//   400 — validatsiya: "telefon raqami noto'g'ri formatda" va h.k.
+//         Bu xaridor formani noto'g'ri to'ldirgani, server nosozligi emas.
+//   401 — "tizimga kirilmagan". ENG KO'P UCHRAGANI SHU EDI: access token
+//         muddati qisqa (15 daqiqa), tugagach brauzer navbatdagi so'rovda
+//         401 oladi, keyin token avtomatik yangilanib so'rov qaytadan
+//         yuboriladi. Ya'ni bu tokenni yangilash mexanizmining O'ZI —
+//         har bir faol xaridorda kuniga o'nlab marta takrorlanadi.
+//   403 — "sizga tegishli emas": masalan boshqa odamning buyurtmasini
+//         ochmoqchi bo'lgan. Himoya TO'G'RI ishlagani belgisi.
+//   409 — "bu raqam allaqachon ro'yxatdan o'tgan" kabi holатlar.
+//   429 — so'rovlar limiti. Cheklov ishlayotganini bildiradi.
+//
+// Agar shulardan birortasini ham ko'rmoqchi bo'lsangiz — shu ro'yxatdan
+// o'chirsangiz kifoya, boshqa hech narsani o'zgartirish kerak emas.
+const IGNORED_STATUSES = new Set([400, 401, 403, 409, 429]);
+
 @Catch()
 export class GqlErrorReporterFilter implements ExceptionFilter, GqlExceptionFilter {
   private readonly logger = new Logger(GqlErrorReporterFilter.name);
@@ -37,6 +56,10 @@ export class GqlErrorReporterFilter implements ExceptionFilter, GqlExceptionFilt
     // HttpException bo'lsa uning haqiqiy kodi (404, 400, 429...), aks holda
     // — kutilmagan bug — 500 deb hisoblanadi.
     const status = exception instanceof HttpException ? exception.getStatus() : 500;
+    // Kutilgan, normal holatlar (yuqoridagi ro'yxatga qarang) — serverning
+    // o'z logiga baribir tushadi, lekin Telegram'ga chiqarilmaydi.
+    if (IGNORED_STATUSES.has(status)) return;
+
     const context = this.resolveContext(host);
     const error = exception instanceof Error ? exception : new Error(String(exception));
 
