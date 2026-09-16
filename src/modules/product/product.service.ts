@@ -163,6 +163,40 @@ export class ProductService implements OnModuleInit {
     }
     if (and.length) where.AND = and;
 
+    // TASODIFIY TARTIB (bosh sahifa uchun).
+    //
+    // SQLite'da Prisma'ning `orderBy` bilan "ORDER BY RANDOM()" qilib
+    // bo'lmaydi, shuning uchun: avval mos keladigan tovarlarning faqat
+    // ID'lari olinadi (yengil so'rov), ular Fisher-Yates bilan
+    // aralashtiriladi, kerakli sahifadagi qismi kesib olinadi va faqat
+    // o'sha bir nechta tovar to'liq yuklanadi. Filtrlar (`where`) va
+    // `total` hisobi boshqa tartiblar bilan bir xil ishlaydi — ya'ni
+    // qidiruv/filtr/sahifalash buzilmaydi.
+    if (filter.sort === ProductSort.RANDOM) {
+      const ids = await this.prisma.product.findMany({ where, select: { id: true } });
+      for (let i = ids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      const pageIds = ids
+        .slice((filter.page - 1) * filter.limit, filter.page * filter.limit)
+        .map((p) => p.id);
+      if (pageIds.length === 0) return { list: [], total: ids.length };
+
+      const rows = await this.prisma.product.findMany({
+        where: { id: { in: pageIds } },
+        include: PRODUCT_INCLUDE,
+      });
+      // `IN (...)` natijasi bazadagi tartibda qaytadi, shuning uchun
+      // aralashtirilgan tartib qaytadan tiklanadi.
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const list = pageIds
+        .map((id) => byId.get(id))
+        .filter((p): p is (typeof rows)[number] => !!p)
+        .map((p) => this.mapProduct(p));
+      return { list, total: ids.length };
+    }
+
     const orderBy = this.resolveSort(filter.sort);
 
     const [list, total] = await Promise.all([

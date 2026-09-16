@@ -7,6 +7,12 @@ export enum ProductSort {
   PRICE_DESC = 'PRICE_DESC',
   MOST_POPULAR = 'MOST_POPULAR',
   TOP_RATED = 'TOP_RATED',
+  // Har safar aralashtirib beradi — bosh sahifa shuni ishlatadi, shunda
+  // saytga kirgan odam har gal boshqa tovarlarni ko'radi. Do'kon
+  // sahifasidagi saralash ro'yxatiga qo'shilmagan (u yerda sahifalash
+  // bo'lgani uchun tartib barqaror bo'lishi kerak) — faqat bosh sahifa
+  // uchun mo'ljallangan.
+  RANDOM = 'RANDOM',
 }
 
 registerEnumType(ProductSort, { name: 'ProductSort' });

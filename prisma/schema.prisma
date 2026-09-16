@@ -115,8 +115,54 @@ model Category {
   updatedAt   DateTime @updatedAt
 
   products Product[]
+  banners  Banner[]
 
   @@map("categories")
+}
+
+// Bosh sahifadagi reklama bannerlari — admin panelning "Reklamalar"
+// bo'limidan qo'shiladi, hech qanday qattiq yozilgan (hardcode) rasm yo'q.
+//
+// Har bir banner ixtiyoriy ravishda BITTA mahsulotga YOKI BITTA
+// kategoriyaga bog'lanadi: xaridor bannerni bosganda o'sha sahifaga
+// o'tadi. Hech qaysisi tanlanmasa (linkType = "NONE") banner shunchaki
+// rasm bo'lib turadi va bosilmaydi.
+//
+// linkType — "NONE" | "PRODUCT" | "CATEGORY". SQLite'da Prisma `enum`ni
+// qo'llab-quvvatlamaydi (yuqoridagi izohga qarang), shuning uchun oddiy
+// matn ustun; haqiqiy tekshiruv GraphQL DTO'sida (class-validator) va
+// servisda amalga oshiriladi.
+//
+// Bog'langan mahsulot/kategoriya o'chirilsa — banner o'chib ketmaydi,
+// faqat havolasi uziladi (onDelete: SetNull) va servis uni bosilmaydigan
+// holatga tushiradi. Aks holda bitta tovarni o'chirish reklamani ham
+// birga olib ketardi.
+model Banner {
+  id        String   @id @default(uuid())
+  // Yuklangan rasm manzili (/uploads/... — mahsulot rasmlari bilan bir xil
+  // REST endpoint orqali yuklanadi).
+  image     String
+  // Rasm ustida ko'rinadigan ixtiyoriy matn. Bo'sh qoldirilsa faqat rasm
+  // ko'rsatiladi.
+  title     String?
+  titleRu   String?
+  linkType  String   @default("NONE")
+  isActive  Boolean  @default(true)
+  // Kichik raqam — oldinroq. Teng bo'lsa yangisi oldinda.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@index([productId])
+  @@index([categoryId])
+  @@map("banners")
 }
 
 model Brand {
@@ -252,6 +298,7 @@ model Product {
   variants      ProductVariant[]
   reviews       Review[]
   deductions    StockDeduction[]
+  banners       Banner[]
 
   @@index([categoryId])
   @@index([brandId])

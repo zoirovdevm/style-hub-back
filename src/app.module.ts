@@ -28,6 +28,7 @@ import { TelegramModule } from './modules/telegram/telegram.module';
 import { ReviewModule } from './modules/review/review.module';
 import { StoreModule } from './modules/store/store.module';
 import { StockBotModule } from './modules/stock-bot/stock-bot.module';
+import { BannerModule } from './modules/banner/banner.module';
 
 @Module({
   imports: [
@@ -80,6 +81,9 @@ import { StockBotModule } from './modules/stock-bot/stock-bot.module';
     ReviewModule,
     StoreModule,
     StockBotModule,
+    // Bosh sahifadagi reklama bannerlari (admin panelning "Reklamalar"
+    // bo'limi) — modules/banner/.
+    BannerModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
