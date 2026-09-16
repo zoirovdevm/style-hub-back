@@ -5,6 +5,7 @@ import { OrderFilterInput } from './dto/order-filter.input';
 import { UpdateOrderStatusInput } from './dto/update-order-status.input';
 import { OrderStatus, PaymentStatus } from '../../common/enums/order.enum';
 import { mapProductArrays } from '../../common/utils/parse-json-array.util';
+import { resolveUnitPrice } from '../../common/utils/variant-price.util';
 
 @Injectable()
 export class OrderService {
@@ -157,8 +158,12 @@ export class OrderService {
     }
 
     // Har bir qator uchun HAQIQIY birlik narxi. Variantning o'z narxi
-    // bo'lsa (duxi hajmlari: 50ml va 100ml narxi har xil) — o'sha, aks
-    // holda mahsulotning umumiy narxi. Narx SERVERDA, ma'lumotlar
+    // bo'lsa (duxi hajmlari: 150ml va 200ml narxi har xil, ularni admin
+    // qo'lda qo'yadi) — o'sha; yozilmagan hajmlar esa eng kichik hajmga
+    // proporsional hisoblanadi (10ml = umumiy narx, 20ml = ×2, 30ml = ×3),
+    // aks holda mahsulotning umumiy narxi. Qoida frontend bilan bitta
+    // faylda takrorlangan: common/utils/variant-price.util.ts.
+    // Narx SERVERDA, ma'lumotlar
     // bazasidagi qiymatdan hisoblanadi — brauzerdan kelgan hech qanday
     // narxga ishonilmaydi, aks holda xaridor so'rovni o'zgartirib
     // istalgan narxni yuborishi mumkin bo'lardi.
@@ -166,14 +171,10 @@ export class OrderService {
     // Xuddi shu qiymat ham umumiy summaga, ham buyurtma qatoriga
     // yoziladi — ikkalasi bir manbadan olingani uchun ular hech qachon
     // bir-biridan farq qilib qolmaydi.
-    const pricedItems = cartItems.map((item) => {
-      const variant =
-        item.size || item.color
-          ? item.product.variants.find((v) => v.size === (item.size ?? '') && v.color === (item.color ?? ''))
-          : null;
-      const unitPrice = variant?.price != null ? Number(variant.price) : Number(item.product.price);
-      return { item, unitPrice };
-    });
+    const pricedItems = cartItems.map((item) => ({
+      item,
+      unitPrice: resolveUnitPrice(item.product, item.size, item.color),
+    }));
 
     const totalAmount = pricedItems.reduce((sum, { item, unitPrice }) => sum + unitPrice * item.quantity, 0);
 
