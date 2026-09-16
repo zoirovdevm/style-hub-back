@@ -318,6 +318,11 @@ model ProductVariant {
   size      String
   color     String
   stock     Int      @default(0)
+  // Shu variantning O'Z narxi. Asosan duxi uchun: 50ml va 100ml bitta
+  // mahsulot, lekin narxi har xil. NULL bo'lsa — mahsulotning umumiy
+  // narxi (Product.price) ishlatiladi, shuning uchun narxi o'lchamga
+  // bog'liq bo'lmagan mahsulotlar (kiyim, poyabzal) avvalgidek ishlaydi.
+  price     Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

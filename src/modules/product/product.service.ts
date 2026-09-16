@@ -246,7 +246,7 @@ export class ProductService implements OnModuleInit {
           colorImages: this.serializeColorImages(input.colorImages),
           slug: `${slugify(input.title, { lower: true, strict: true })}-${Date.now().toString(36)}`,
           ...(variants?.length
-            ? { variants: { create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock })) } }
+            ? { variants: { create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock, price: v.price ?? null })) } }
             : {}),
         },
         include: PRODUCT_INCLUDE,
@@ -279,7 +279,7 @@ export class ProductService implements OnModuleInit {
             // wipe and recreate rather than diff/upsert each row.
             variants: {
               deleteMany: {},
-              create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock })),
+              create: variants.map((v) => ({ size: v.size, color: v.color, stock: v.stock, price: v.price ?? null })),
             },
           }
         : {}),

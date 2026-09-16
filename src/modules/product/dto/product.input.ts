@@ -35,6 +35,16 @@ export class VariantInput {
   @IsInt()
   @Min(0)
   stock: number;
+
+  // Shu variantning o'z narxi (duxi hajmlari uchun). Ixtiyoriy: berilmasa
+  // mahsulotning umumiy narxi ishlatiladi, shuning uchun kiyim/poyabzal
+  // kabi mahsulotlarda admin bu maydonni umuman to'ldirmaydi va hech
+  // narsa o'zgarmaydi.
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
 }
 
 @InputType()

@@ -1,0 +1,12 @@
+-- Har bir variant (o'lcham/rang) uchun ALOHIDA narx.
+--
+-- NEGA: duxi hajm bo'yicha sotiladi (10ml, 50ml, 100ml...) va har bir
+-- hajmning o'z narxi bo'ladi. Avval mahsulotning bittagina narxi bor edi,
+-- shuning uchun "50ml — 250 000, 100ml — 400 000" deb ko'rsatishning iloji
+-- yo'q edi.
+--
+-- NULL qoldirilsa — mahsulotning umumiy narxi ishlatiladi. Shu sababli
+-- mavjud barcha mahsulotlar (kiyim, poyabzal va h.k.) avvalgidek ishlashda
+-- davom etadi: ularning variantlarida narx NULL bo'lib qoladi.
+-- AlterTable
+ALTER TABLE "product_variants" ADD COLUMN "price" REAL;

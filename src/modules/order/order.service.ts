@@ -156,10 +156,26 @@ export class OrderService {
       }
     }
 
-    const totalAmount = cartItems.reduce(
-      (sum, item) => sum + Number(item.product.price) * item.quantity,
-      0,
-    );
+    // Har bir qator uchun HAQIQIY birlik narxi. Variantning o'z narxi
+    // bo'lsa (duxi hajmlari: 50ml va 100ml narxi har xil) — o'sha, aks
+    // holda mahsulotning umumiy narxi. Narx SERVERDA, ma'lumotlar
+    // bazasidagi qiymatdan hisoblanadi — brauzerdan kelgan hech qanday
+    // narxga ishonilmaydi, aks holda xaridor so'rovni o'zgartirib
+    // istalgan narxni yuborishi mumkin bo'lardi.
+    //
+    // Xuddi shu qiymat ham umumiy summaga, ham buyurtma qatoriga
+    // yoziladi — ikkalasi bir manbadan olingani uchun ular hech qachon
+    // bir-biridan farq qilib qolmaydi.
+    const pricedItems = cartItems.map((item) => {
+      const variant =
+        item.size || item.color
+          ? item.product.variants.find((v) => v.size === (item.size ?? '') && v.color === (item.color ?? ''))
+          : null;
+      const unitPrice = variant?.price != null ? Number(variant.price) : Number(item.product.price);
+      return { item, unitPrice };
+    });
+
+    const totalAmount = pricedItems.reduce((sum, { item, unitPrice }) => sum + unitPrice * item.quantity, 0);
 
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
@@ -174,10 +190,14 @@ export class OrderService {
           paymentMethod: input.paymentMethod,
           paymentStatus: PaymentStatus.PENDING,
           items: {
-            create: cartItems.map((item) => ({
+            create: pricedItems.map(({ item, unitPrice }) => ({
               productId: item.productId,
               title: item.product.title,
-              price: item.product.price,
+              // Yuqorida hisoblangan variant narxi (bo'lmasa — mahsulot
+              // narxi). Buyurtma qatoriga narx NUSXA qilib yoziladi,
+              // shuning uchun keyinchalik mahsulot narxi o'zgarsa ham
+              // eski buyurtmalardagi summa o'zgarmaydi.
+              price: unitPrice,
               size: item.size,
               color: item.color,
               quantity: item.quantity,
