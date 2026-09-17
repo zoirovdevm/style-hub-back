@@ -164,7 +164,17 @@ export class AuthService {
       throw new BadRequestException('Telefon raqami tasdiqlanmagan. Avval SMS kodni tasdiqlang.');
     }
 
-    const existing = await this.prisma.user.findUnique({ where: { email: input.email } });
+    // Ro'yxatdan o'tish endi FAQAT telefon raqami bilan: email ixtiyoriy.
+    // Kiritilmagan bo'lsa, raqamdan kelib chiqib ichki (foydalanuvchiga
+    // ko'rsatilmaydigan) manzil yasaladi — bazadagi `email` ustuni NOT
+    // NULL + UNIQUE bo'lgani uchun shu kerak, lekin bu tufayli hech
+    // qanday migratsiya va mavjud hisoblarga tegish talab qilinmaydi.
+    // Bunday hisob parolni SMS kod orqali tiklaydi (requestPasswordReset
+    // telefon tarmog'i allaqachon mavjud), elektron pochta orqali emas.
+    const phoneDigits = input.phone.replace(/\D/g, '');
+    const email = input.email ?? `${phoneDigits}@phone.local`;
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Bu email allaqachon ro‘yxatdan o‘tgan');
 
     const existingPhone = await this.prisma.user.findUnique({ where: { phone: input.phone } });
@@ -174,12 +184,12 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
-        email: input.email,
+        email,
         passwordHash,
         firstName: input.firstName,
         lastName: input.lastName,
         phone: input.phone,
-        address: input.address,
+        address: input.address ?? null,
         role: Role.USER,
         phoneVerified: true,
         emailVerified: false,

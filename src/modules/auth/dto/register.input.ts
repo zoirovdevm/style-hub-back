@@ -1,20 +1,27 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEmail, IsString, MinLength, IsNotEmpty, Matches } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MinLength, IsNotEmpty, Matches } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UZ_PHONE_REGEX, normalizePhoneValue } from '../../../common/utils/phone.util';
 
 @InputType()
 export class RegisterInput {
-  // Only Gmail addresses are accepted for now — normalized to lowercase
-  // first so "Name@GMAIL.com" doesn't slip past the @gmail.com check, and
-  // so the same address always ends up stored the same way (matches the
-  // lowercase-on-lookup convention login()/requestPasswordReset() already
-  // use for email).
-  @Field()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  // Email endi MAJBURIY EMAS — ro'yxatdan o'tish telefon raqami bilan
+  // amalga oshiriladi (raqam SMS kod orqali tasdiqlanadi, pastdagi
+  // `phone` izohiga qarang). Kiritilsa, avvalgidek faqat @gmail.com
+  // qabul qilinadi va kichik harfga keltiriladi.
+  //
+  // Bo'sh qoldirilsa, AuthService raqamdan kelib chiqib ichki
+  // (ko'rinmaydigan) manzil yozib qo'yadi — bazadagi `email` ustuni
+  // NOT NULL + UNIQUE bo'lgani uchun. Buning uchun migratsiya kerak
+  // emas va mavjud hisoblarga umuman tegilmaydi.
+  @Field({ nullable: true })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? (value.trim() === '' ? undefined : value.trim().toLowerCase()) : value,
+  )
+  @IsOptional()
   @IsEmail()
   @Matches(/^[^\s@]+@gmail\.com$/, { message: 'Email manzil @gmail.com bilan tugashi kerak' })
-  email: string;
+  email?: string;
 
   @Field()
   @IsString()
@@ -43,11 +50,14 @@ export class RegisterInput {
   @Matches(UZ_PHONE_REGEX, { message: 'Telefon raqam +998901234567 formatida bo‘lishi kerak' })
   phone: string;
 
-  // Required per the new registration form — was optional/absent before
-  // since the old single-step form never collected it here (address used
-  // to only be settable later from the profile page).
-  @Field()
+  // Manzil ham majburiy emas. Ro'yxatdan o'tish imkon qadar qisqa
+  // bo'lishi kerak (faqat raqam + ism + parol); manzil birinchi
+  // buyurtmada so'raladi va o'sha yerda profilga saqlanadi
+  // (checkout sahifasi updateProfile'ni chaqiradi), keyingi
+  // buyurtmalarda esa tayyor holda ko'rsatiladi.
+  @Field({ nullable: true })
+  @IsOptional()
   @IsString()
   @IsNotEmpty({ message: 'Manzil kiritilishi shart' })
-  address: string;
+  address?: string;
 }

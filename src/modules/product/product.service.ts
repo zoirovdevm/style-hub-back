@@ -152,30 +152,64 @@ export class ProductService implements OnModuleInit {
       if (filter.minPrice != null) where.price.gte = filter.minPrice;
       if (filter.maxPrice != null) where.price.lte = filter.maxPrice;
     }
+    // QIDIRUV — endi faqat tovar nomi bo'yicha emas.
+    //
+    // Xaridor "polo" deb yozganda, agar bizda shunday BREND bo'lsa, o'sha
+    // brendning hamma tovari chiqishi kerak; "krossovka" desa — o'sha
+    // KATEGORIYA tovarlari; tovar nomini yozsa — o'sha tovar. Shuning
+    // uchun bitta so'z bir vaqtning o'zida nom, brend, kategoriya, jins
+    // va SKU bo'yicha qidiriladi.
+    //
+    // Katta/kichik harf: SQLite'dagi LIKE lotin harflari uchun harf
+    // registriga BEFARQ, ya'ni "pol" -> "Polo" topadi. Kirill/o'zbek
+    // maxsus harflari uchun esa bunday emas, shu sababli so'rov uchta
+    // ko'rinishda (yozilgani, butunlay kichik va Bosh harfli) sinab
+    // ko'riladi. Bo'lak so'z ham ishlaydi ("pol" -> "Polo"), chunki
+    // `contains` ikki tomonlama % bilan qidiradi.
     if (filter.search) {
-      and.push({
-        OR: [
-          { title: { contains: filter.search } },
-          { titleRu: { contains: filter.search } },
-          { description: { contains: filter.search } },
-        ],
-      });
+      const raw = filter.search.trim();
+      const lower = raw.toLowerCase();
+      const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
+      const terms = Array.from(new Set([raw, lower, capitalized])).filter(Boolean);
+
+      const clauses: any[] = [];
+      for (const term of terms) {
+        clauses.push(
+          { title: { contains: term } },
+          { titleRu: { contains: term } },
+          { description: { contains: term } },
+          { sku: { contains: term } },
+          { brand: { name: { contains: term } } },
+          { category: { name: { contains: term } } },
+          { category: { nameRu: { contains: term } } },
+          { gender: { name: { contains: term } } },
+          { gender: { nameRu: { contains: term } } },
+        );
+      }
+      and.push({ OR: clauses });
     }
     if (and.length) where.AND = and;
 
-    // TASODIFIY TARTIB (bosh sahifa uchun).
+    // TASODIFIY TARTIB (do'kon sahifasi uchun).
     //
     // SQLite'da Prisma'ning `orderBy` bilan "ORDER BY RANDOM()" qilib
     // bo'lmaydi, shuning uchun: avval mos keladigan tovarlarning faqat
-    // ID'lari olinadi (yengil so'rov), ular Fisher-Yates bilan
-    // aralashtiriladi, kerakli sahifadagi qismi kesib olinadi va faqat
-    // o'sha bir nechta tovar to'liq yuklanadi. Filtrlar (`where`) va
-    // `total` hisobi boshqa tartiblar bilan bir xil ishlaydi — ya'ni
-    // qidiruv/filtr/sahifalash buzilmaydi.
+    // ID'lari olinadi (yengil so'rov), ular aralashtiriladi, kerakli
+    // sahifadagi qismi kesib olinadi va faqat o'sha bir nechta tovar
+    // to'liq yuklanadi. Filtrlar (`where`) va `total` hisobi boshqa
+    // tartiblar bilan bir xil ishlaydi — qidiruv/filtr buzilmaydi.
+    //
+    // MUHIM — nega "urug'" (seed) bilan: sof tasodifiy bo'lsa, 2-sahifaga
+    // o'tganda ro'yxat butunlay qaytadan aralashib ketardi va bitta tovar
+    // ikkala sahifada chiqib, boshqasi umuman ko'rinmay qolardi. Shuning
+    // uchun aralashtirish SOATLIK urug'dan kelib chiqadi: bir soat ichida
+    // tartib barqaror (sahifalash to'g'ri ishlaydi), keyingi soatda esa
+    // ro'yxat o'zidan-o'zi yangi tartibda ko'rinadi.
     if (filter.sort === ProductSort.RANDOM) {
       const ids = await this.prisma.product.findMany({ where, select: { id: true } });
+      const random = this.seededRandom(Math.floor(Date.now() / 3_600_000));
       for (let i = ids.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(random() * (i + 1));
         [ids[i], ids[j]] = [ids[j], ids[i]];
       }
       const pageIds = ids
@@ -211,6 +245,21 @@ export class ProductService implements OnModuleInit {
     ]);
 
     return { list: list.map((p) => this.mapProduct(p)), total };
+  }
+
+  // Bir xil urug'dan (seed) doim bir xil ketma-ketlik chiqaradigan kichik
+  // generator (mulberry32). Math.random() dan farqi — natijasi oldindan
+  // aniq: shu sababli tasodifiy tartibdagi ro'yxat sahifadan sahifaga
+  // o'zgarib ketmaydi.
+  private seededRandom(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a += 0x6d2b79f5;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   private resolveSort(sort: ProductSort) {
