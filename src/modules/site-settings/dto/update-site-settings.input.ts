@@ -27,4 +27,29 @@ export class UpdateSiteSettingsInput {
   @IsOptional()
   @IsString()
   contactEmail?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  socialTelegram?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  socialInstagram?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  socialTiktok?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  paymentCardNumber?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  paymentCardHolder?: string;
 }

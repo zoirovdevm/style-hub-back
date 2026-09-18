@@ -26,6 +26,24 @@ export class SiteSettings {
   @Field({ nullable: true })
   contactEmail?: string;
 
+  // Footer ikonkalari uchun to'liq havola (Telegram / Instagram).
+  // Facebook ATAYLAB yo'q — u footer'dan olib tashlandi.
+  @Field({ nullable: true })
+  socialTelegram?: string;
+
+  @Field({ nullable: true })
+  socialInstagram?: string;
+
+  @Field({ nullable: true })
+  socialTiktok?: string;
+
+  // To'lov kartasi — buyurtma ekranida ko'rsatiladi (OrderPaymentPanel).
+  @Field({ nullable: true })
+  paymentCardNumber?: string;
+
+  @Field({ nullable: true })
+  paymentCardHolder?: string;
+
   @Field()
   updatedAt: Date;
 }

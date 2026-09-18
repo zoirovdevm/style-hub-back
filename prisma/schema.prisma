@@ -466,6 +466,24 @@ model SiteSettings {
   contactPhone    String?
   contactTelegram String?
   contactEmail    String?
+
+  // Footer'dagi ijtimoiy tarmoq ikonkalari uchun TO'LIQ havola
+  // (masalan "https://t.me/wardrobestore"). contactTelegram'dan farqi:
+  // u "Yordam" sahifasida ko'rsatiladigan @username, bu esa bosiladigan
+  // manzil. Bo'sh qoldirilsa footer o'zining standart havolalarini
+  // ishlatadi (lib/seo/site.ts, BRAND_SOCIAL_LINKS).
+  socialTelegram  String?
+  socialInstagram String?
+  socialTiktok    String?
+
+  // To'lov kartasi — xaridor buyurtmadan keyin pul o'tkazadigan karta.
+  // Avval bu raqam va ism frontend kodida qattiq yozilgan edi
+  // (OrderPaymentPanel.tsx), ya'ni kartani almashtirish uchun saytni
+  // qaytadan deploy qilish kerak bo'lardi. Endi admin panelidan
+  // o'zgartiriladi va o'sha zahoti to'lov ekranida ko'rinadi.
+  paymentCardNumber String?
+  paymentCardHolder String?
+
   updatedAt       DateTime @updatedAt
 
   @@map("site_settings")
