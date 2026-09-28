@@ -24,6 +24,17 @@ export class ProductFilterInput {
   @IsString()
   search?: string;
 
+  // Aniq tovarlar ro'yxati bo'yicha filtr. Bitta bannerga bir nechta
+  // tovar biriktirilganda ishlatiladi: banner bosilganda do'kon sahifasi
+  // FAQAT o'sha tovarlarni ko'rsatadi (`/shop?products=id1,id2`).
+  // Qolgan filtrlar (kategoriya, o'lcham, narx) bilan birga ham
+  // ishlayveradi — ular AND orqali birikadi.
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ids?: string[];
+
   @Field({ nullable: true })
   @IsOptional()
   @IsString()

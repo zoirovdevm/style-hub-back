@@ -15,6 +15,32 @@ type AuthPayload {
   user: User!
 }
 
+type Banner {
+  categoryId: String
+  categoryName: String
+  categorySlug: String
+  createdAt: DateTime!
+  id: ID!
+  image: String!
+  isActive: Boolean!
+  linkType: String!
+  productId: String
+  productSlug: String
+  productTitle: String
+  products: [BannerProductRef!]!
+  sortOrder: Int!
+  title: String
+  titleRu: String
+  updatedAt: DateTime!
+}
+
+type BannerProductRef {
+  id: ID!
+  image: String
+  slug: String!
+  title: String!
+}
+
 type Brand {
   createdAt: DateTime!
   id: ID!
@@ -46,10 +72,32 @@ type Category {
   updatedAt: DateTime!
 }
 
+type ColorImages {
+  color: String!
+  images: [String!]!
+}
+
+input ColorImagesInput {
+  color: String!
+  images: [String!]!
+}
+
 input ContactMessageInput {
   contact: String!
   message: String!
   name: String!
+}
+
+input CreateBannerInput {
+  categoryId: String
+  image: String!
+  isActive: Boolean = true
+  linkType: String! = "NONE"
+  productId: String
+  productIds: [String!]
+  sortOrder: Int = 0
+  title: String
+  titleRu: String
 }
 
 input CreateBrandInput {
@@ -64,7 +112,16 @@ input CreateCategoryInput {
   nameRu: String
 }
 
+input CreateGenderInput {
+  name: String!
+  nameRu: String
+}
+
 input CreateOrderInput {
+  buyNowColor: String
+  buyNowProductId: ID
+  buyNowQuantity: Int
+  buyNowSize: String
   deliveryAddress: String!
   deliveryCity: String
   itemIds: [ID!]
@@ -76,10 +133,12 @@ input CreateOrderInput {
 input CreateProductInput {
   brandId: ID
   categoryId: ID!
+  colorImages: [ColorImagesInput!]! = []
   colors: [String!]! = []
   description: String
   descriptionRu: String
   discountPercent: Int
+  genderId: ID
   images: [String!]! = []
   isFeatured: Boolean! = false
   oldPrice: Float
@@ -128,6 +187,15 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type Gender {
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  nameRu: String
+  slug: String!
+  updatedAt: DateTime!
+}
+
 input LoginInput {
   identifier: String!
   password: String!
@@ -138,8 +206,10 @@ type Mutation {
   clearAllData: Boolean!
   clearCart: Boolean!
   clearOrdersData: Boolean!
+  createBanner(input: CreateBannerInput!): Banner!
   createBrand(input: CreateBrandInput!): Brand!
   createCategory(input: CreateCategoryInput!): Category!
+  createGender(input: CreateGenderInput!): Gender!
   createOrder(input: CreateOrderInput!): Order!
   createProduct(input: CreateProductInput!): Product!
   createReview(input: CreateReviewInput!): Review!
@@ -151,11 +221,15 @@ type Mutation {
   refreshToken(refreshToken: String!): AuthPayload!
   regenerateStoreCode(id: ID!): String!
   register(input: RegisterInput!): AuthPayload!
+  rejectOrderPayment(orderId: ID!): Order!
+  removeBanner(id: ID!): Boolean!
   removeBrand(id: ID!): Boolean!
   removeCartItem(id: ID!): Boolean!
   removeCategory(id: ID!): Boolean!
+  removeGender(id: ID!): Boolean!
   removeProduct(id: ID!): Boolean!
   removeStore(id: ID!): Boolean!
+  removeUser(id: ID!): Boolean!
   removeWishlistItem(id: ID!): Boolean!
   requestPasswordReset(input: RequestPasswordResetInput!): PasswordResetRequestResult!
   resendVerificationCode(email: String!): Boolean!
@@ -166,9 +240,11 @@ type Mutation {
   setOrderPaymentStatus(orderId: ID!, paid: Boolean!): Order!
   setUserActive(id: ID!, isActive: Boolean!): User!
   toggleWishlist(productId: ID!): ToggleWishlistResult!
+  updateBanner(id: ID!, input: UpdateBannerInput!): Banner!
   updateBrand(id: ID!, input: UpdateBrandInput!): Brand!
   updateCartItem(input: UpdateCartItemInput!): CartItem!
   updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+  updateGender(id: ID!, input: UpdateGenderInput!): Gender!
   updateOrderStatus(input: UpdateOrderStatusInput!): Order!
   updateProduct(id: ID!, input: UpdateProductInput!): Product!
   updateProfile(input: UpdateProfileInput!): User!
@@ -263,11 +339,14 @@ type Product {
   brandId: ID
   category: Category
   categoryId: ID!
+  colorImages: [ColorImages!]!
   colors: [String!]!
   createdAt: DateTime!
   description: String
   descriptionRu: String
   discountPercent: Int
+  gender: Gender
+  genderId: ID
   id: ID!
   images: [String!]!
   isActive: Boolean!
@@ -294,6 +373,8 @@ input ProductFilterInput {
   brandSlug: String
   categorySlug: String
   colors: [String!]
+  genderSlug: String
+  ids: [String!]
   limit: Int! = 12
   maxPrice: Float
   minPrice: Float
@@ -309,24 +390,29 @@ enum ProductSort {
   NEWEST
   PRICE_ASC
   PRICE_DESC
+  RANDOM
   TOP_RATED
 }
 
 type ProductVariant {
   color: String!
   id: ID!
+  price: Float
   size: String!
   stock: Int!
 }
 
 type Query {
+  adminBanners: [Banner!]!
   adminStats: DashboardStats!
   allOrders(filter: OrderFilterInput!): PaginatedOrders!
+  banners: [Banner!]!
   bestSellers(limit: Float): [Product!]!
   brands: [Brand!]!
   canReviewProduct(productId: ID!): Boolean!
   categories: [Category!]!
   category(slug: String!): Category!
+  genders: [Gender!]!
   lowStockProducts(threshold: Float): [Product!]!
   me: User!
   myCart: [CartItem!]!
@@ -345,8 +431,8 @@ type Query {
 }
 
 input RegisterInput {
-  address: String!
-  email: String!
+  address: String
+  email: String
   firstName: String!
   lastName: String!
   password: String!
@@ -392,6 +478,11 @@ type SiteSettings {
   contactTelegram: String
   heroImage: String
   id: String!
+  paymentCardHolder: String
+  paymentCardNumber: String
+  socialInstagram: String
+  socialTelegram: String
+  socialTiktok: String
   updatedAt: DateTime!
 }
 
@@ -429,6 +520,18 @@ type ToggleWishlistResult {
   item: WishlistItem
 }
 
+input UpdateBannerInput {
+  categoryId: String
+  image: String
+  isActive: Boolean = true
+  linkType: String = "NONE"
+  productId: String
+  productIds: [String!]
+  sortOrder: Int = 0
+  title: String
+  titleRu: String
+}
+
 input UpdateBrandInput {
   logo: String
   name: String
@@ -447,6 +550,11 @@ input UpdateCategoryInput {
   nameRu: String
 }
 
+input UpdateGenderInput {
+  name: String
+  nameRu: String
+}
+
 input UpdateOrderStatusInput {
   orderId: ID!
   status: OrderStatus!
@@ -455,10 +563,12 @@ input UpdateOrderStatusInput {
 input UpdateProductInput {
   brandId: ID
   categoryId: ID
+  colorImages: [ColorImagesInput!] = []
   colors: [String!] = []
   description: String
   descriptionRu: String
   discountPercent: Int
+  genderId: ID
   images: [String!] = []
   isActive: Boolean
   isFeatured: Boolean = false
@@ -487,6 +597,11 @@ input UpdateSiteSettingsInput {
   contactPhone: String
   contactTelegram: String
   heroImage: String
+  paymentCardHolder: String
+  paymentCardNumber: String
+  socialInstagram: String
+  socialTelegram: String
+  socialTiktok: String
 }
 
 input UpdateStoreInput {
@@ -519,6 +634,7 @@ input UsersFilterInput {
 
 input VariantInput {
   color: String!
+  price: Float
   size: String!
   stock: Int!
 }

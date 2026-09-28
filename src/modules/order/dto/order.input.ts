@@ -80,4 +80,15 @@ export class CreateOrderInput {
   @IsInt()
   @Min(1)
   buyNowQuantity?: number;
+
+  // Xaridor kiritgan promokod. SERVER uni o'zi qaytadan tekshiradi va
+  // chegirmani qaytadan hisoblaydi — brauzer yuborgan summaga hech
+  // qachon ishonilmaydi. Kod yaroqsiz bo'lsa buyurtma RAD ETILMAYDI,
+  // shunchaki chegirmasiz o'tadi (xaridorning savati yo'qolmasligi
+  // uchun) — ammo muddati tugagan yoki allaqachon ishlatilgan kod
+  // chegirma bermaydi.
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
 }

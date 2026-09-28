@@ -116,6 +116,9 @@ model Category {
 
   products Product[]
   banners  Banner[]
+  // Promokod faqat shu kategoriyaga amal qilishi uchun (PromoCode.scope =
+  // "CATEGORIES") — oraliq jadval orqali.
+  promoLinks PromoCodeCategory[]
 
   @@map("categories")
 }
@@ -159,10 +162,128 @@ model Banner {
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
+  // linkType = "PRODUCTS" bo'lganda — bannerga biriktirilgan bir NECHTA
+  // tovar. Yuqoridagi bitta `productId` esa eski "PRODUCT" turi uchun
+  // qoladi (mavjud bannerlar buzilmasligi uchun).
+  products BannerProduct[]
+
   @@index([isActive])
   @@index([productId])
   @@index([categoryId])
   @@map("banners")
+}
+
+// Banner <-> Mahsulot bog'lanishi (ko'pga-ko'p). Bitta bannerga bir
+// nechta tovarni tanlash uchun: masalan bitta reklamaga krossovka,
+// ko'ylak va futbolka birga qo'shiladi.
+model BannerProduct {
+  id        String @id @default(uuid())
+  sortOrder Int    @default(0)
+
+  bannerId String
+  banner   Banner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Bir xil tovar bitta bannerga ikki marta qo'shilmasin.
+  @@unique([bannerId, productId])
+  @@index([bannerId])
+  @@index([productId])
+  @@map("banner_products")
+}
+
+// ── PROMOKODLAR ──────────────────────────────────────────────────────
+//
+// Admin panelning "Promokodlar" bo'limidan qo'shiladi. Har bir kod:
+//   • chegirma turi (foiz yoki aniq summa) va qiymati,
+//   • amal qilish muddati (boshlanish/tugash — ixtiyoriy),
+//   • qamrovi: hamma tovarga / tanlangan kategoriyalarga / tanlangan
+//     tovarlarga,
+//   • bitta telefon raqamidan FAQAT BIR MARTA ishlatilishi.
+model PromoCode {
+  id String @id @default(uuid())
+  // Har doim KATTA harfda saqlanadi — xaridor qanday yozishidan qat'i
+  // nazar topilishi uchun (service ichida `toUpperCase()` qilinadi).
+  code String @unique
+  // "PERCENT" — foiz, "AMOUNT" — aniq summa (so'm).
+  discountType String @default("PERCENT")
+  discountValue Float
+  // Foizli chegirma uchun ixtiyoriy shift: "10% lekin ko'pi bilan
+  // 50 000 so'm".
+  maxDiscount Float?
+  // Shu summadan kam buyurtmaga kod ishlamaydi (ixtiyoriy).
+  minOrderAmount Float?
+  // Ixtiyoriy muddat. Bo'sh bo'lsa — cheklanmagan.
+  startsAt DateTime?
+  endsAt   DateTime?
+  isActive Boolean @default(true)
+  // "ALL" | "CATEGORIES" | "PRODUCTS"
+  scope String @default("ALL")
+  // Nechta marta ishlatilgani (hisobot uchun; cheklov emas).
+  usedCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories PromoCodeCategory[]
+  products   PromoCodeProduct[]
+  usages     PromoCodeUsage[]
+
+  @@index([isActive])
+  @@map("promo_codes")
+}
+
+model PromoCodeCategory {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, categoryId])
+  @@index([promoCodeId])
+  @@map("promo_code_categories")
+}
+
+model PromoCodeProduct {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, productId])
+  @@index([promoCodeId])
+  @@map("promo_code_products")
+}
+
+// "Bitta raqam — bitta marta" qoidasi aynan shu jadval orqali ishlaydi.
+// Telefon raqami NORMALLASHTIRILGAN ko'rinishda saqlanadi (faqat
+// raqamlar), shuning uchun "+998 99 213 28 01" va "998992132801" bitta
+// foydalanuvchi deb hisoblanadi. Bitta kod uchun bitta raqamdan faqat
+// bitta satr bo'la oladi (@@unique) — bazaning O'ZI takror ishlatishni
+// rad etadi, ya'ni ikki buyurtma bir vaqtda kelib qolsa ham ikkinchisi
+// o'tib ketmaydi.
+model PromoCodeUsage {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promo       PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  phone  String
+  userId String?
+  orderId String?
+  // Shu ishlatishda berilgan chegirma summasi.
+  discount Float @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([promoCodeId, phone])
+  @@index([phone])
+  @@map("promo_code_usages")
 }
 
 model Brand {
@@ -299,6 +420,9 @@ model Product {
   reviews       Review[]
   deductions    StockDeduction[]
   banners       Banner[]
+  bannerLinks   BannerProduct[]
+  // Promokod faqat shu tovarga amal qilishi uchun (scope = "PRODUCTS").
+  promoLinks    PromoCodeProduct[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -418,6 +542,12 @@ model Order {
   note            String?
   paymentMethod   String   @default("CASH")
   paymentStatus   String   @default("PENDING")
+  // Buyurtmaga qo'llangan promokod (nusxa sifatida — keyin promokod
+  // o'chirilsa ham buyurtmada qaysi kod ishlatilgani ko'rinib turadi) va
+  // shu koddan kelib chiqqan chegirma summasi. `totalAmount` esa
+  // chegirma AYIRILGANDAN KEYINGI yakuniy summa.
+  promoCode       String?
+  discountAmount  Float?
   // Set once the buyer opens the Telegram bot's deep link (?start=order_<id>)
   // — lets the bot recognize which order a later screenshot belongs to, and
   // lets it message the buyer back once the admin approves/rejects it.

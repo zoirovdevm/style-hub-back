@@ -41,6 +41,14 @@ export class Order {
   @Field(() => PaymentStatus)
   paymentStatus: PaymentStatus;
 
+  // Buyurtmaga qo'llangan promokod va undan kelgan chegirma summasi.
+  // `totalAmount` — chegirma AYIRILGANDAN keyingi yakuniy summa.
+  @Field({ nullable: true })
+  promoCode?: string;
+
+  @Field(() => Float, { nullable: true })
+  discountAmount?: number;
+
   @Field(() => [OrderItem])
   items: OrderItem[];
 

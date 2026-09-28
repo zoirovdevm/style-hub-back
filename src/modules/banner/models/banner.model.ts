@@ -1,5 +1,21 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 
+// Bannerga biriktirilgan bitta tovar haqidagi qisqa ma'lumot.
+@ObjectType()
+export class BannerProductRef {
+  @Field(() => ID)
+  id: string;
+
+  @Field()
+  slug: string;
+
+  @Field()
+  title: string;
+
+  @Field({ nullable: true })
+  image?: string;
+}
+
 // Bosh sahifadagi reklama banneri (Prisma `Banner` modeli).
 //
 // DIQQAT: bog'langan mahsulot/kategoriya bu yerda TO'LIQ obyekt sifatida
@@ -51,6 +67,12 @@ export class Banner {
 
   @Field({ nullable: true })
   categoryName?: string;
+
+  // linkType = "PRODUCTS" bo'lganda — bannerga biriktirilgan tovarlar.
+  // Faqat ko'rsatish/havola uchun kerakli maydonlar (yuqoridagi izohga
+  // qarang: to'liq Product obyekti ataylab qaytarilmaydi).
+  @Field(() => [BannerProductRef])
+  products: BannerProductRef[];
 
   @Field()
   createdAt: Date;

@@ -6,10 +6,14 @@ import { UpdateOrderStatusInput } from './dto/update-order-status.input';
 import { OrderStatus, PaymentStatus } from '../../common/enums/order.enum';
 import { mapProductArrays } from '../../common/utils/parse-json-array.util';
 import { resolveUnitPrice } from '../../common/utils/variant-price.util';
+import { PromoCodeService } from '../promo-code/promo-code.service';
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly promoCodes: PromoCodeService,
+  ) {}
 
   private generateOrderNumber() {
     const now = new Date();
@@ -178,12 +182,47 @@ export class OrderService {
 
     const totalAmount = pricedItems.reduce((sum, { item, unitPrice }) => sum + unitPrice * item.quantity, 0);
 
+    // ── PROMOKOD ────────────────────────────────────────────────────
+    // Chegirma SERVERDA qayta hisoblanadi: brauzer yuborgan summa
+    // umuman e'tiborga olinmaydi, faqat kodning o'zi olinadi. Kod
+    // yaroqsiz bo'lsa (noto'g'ri, muddati tugagan, shu raqamda
+    // allaqachon ishlatilgan) buyurtma RAD ETILMAYDI — shunchaki
+    // chegirmasiz o'tadi.
+    const subtotal = totalAmount;
+    let promoDiscount = 0;
+    let appliedPromoId: string | null = null;
+    let appliedPromoCode: string | null = null;
+    if (input.promoCode) {
+      const evaluation = await this.promoCodes.evaluate(
+        input.promoCode,
+        input.phone,
+        pricedItems.map(({ item, unitPrice }) => ({
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          unitPrice,
+          quantity: item.quantity,
+        })),
+      );
+      if (evaluation.valid) {
+        promoDiscount = evaluation.discount;
+        appliedPromoId = evaluation.promoId ?? null;
+        appliedPromoCode = evaluation.code ?? null;
+      }
+    }
+    // Yakuniy summa — chegirma ayirilgandan keyin (hech qachon manfiy
+    // bo'lmaydi).
+    const payableAmount = Math.max(0, subtotal - promoDiscount);
+
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: {
           orderNumber: this.generateOrderNumber(),
           userId,
-          totalAmount,
+          // Chegirma AYIRILGANDAN keyingi summa — xaridor aynan shuni
+          // to'laydi.
+          totalAmount: payableAmount,
+          promoCode: appliedPromoCode,
+          discountAmount: promoDiscount || null,
           deliveryAddress: input.deliveryAddress,
           deliveryCity: input.deliveryCity,
           phone: input.phone,
@@ -214,6 +253,21 @@ export class OrderService {
       // whole cart out from under them. `cartItemWhere` is `null` for a
       // "buy now" purchase (see above) — that path never touched the cart
       // table in the first place, so there's nothing to delete here.
+      // Promokod ishlatilgani AYNAN SHU TRANZAKSIYADA yoziladi:
+      // `promoCodeId + phone` ustidagi UNIQUE indeks tufayli ikkinchi
+      // urinish bazaning o'zida xatolik beradi va butun buyurtma bekor
+      // bo'ladi — ya'ni "bitta raqam bitta marta" qoidasini ikkita
+      // buyurtma bir vaqtda kelib qolgan holat ham buza olmaydi.
+      if (appliedPromoId) {
+        await this.promoCodes.recordUsage(tx, {
+          promoId: appliedPromoId,
+          phone: input.phone,
+          userId,
+          orderId: created.id,
+          discount: promoDiscount,
+        });
+      }
+
       if (cartItemWhere) {
         await tx.cartItem.deleteMany({ where: cartItemWhere });
       }

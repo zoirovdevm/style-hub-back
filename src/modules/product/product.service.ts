@@ -133,6 +133,10 @@ export class ProductService implements OnModuleInit {
     // search always combine correctly no matter which ones are active.
     const and: any[] = [];
 
+    // Aniq ID'lar ro'yxati (banner orqali kelingan holat). Bo'sh massiv
+    // kelsa ataylab HECH NARSA qaytarilmaydi — "bo'sh ro'yxat" bilan
+    // "filtr yo'q" bir xil bo'lib qolmasligi kerak.
+    if (filter.ids) where.id = { in: filter.ids };
     if (filter.categorySlug) where.category = { slug: filter.categorySlug };
     if (filter.brandSlug) where.brand = { slug: filter.brandSlug };
     if (filter.genderSlug) where.gender = { slug: filter.genderSlug };
