@@ -15,6 +15,14 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 export class ProductResolver {
   constructor(private readonly productService: ProductService) {}
 
+  // Do'kon filtri uchun — faqat tovarlarda haqiqatda ishlatilgan
+  // ranglar (izohni product.service.ts, usedColors() da ko'ring).
+  @Public()
+  @Query(() => [String])
+  productColors() {
+    return this.productService.usedColors();
+  }
+
   @Public()
   @Query(() => PaginatedProducts)
   products(@Args('filter') filter: ProductFilterInput) {

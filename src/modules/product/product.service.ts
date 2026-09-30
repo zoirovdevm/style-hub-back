@@ -83,6 +83,38 @@ export class ProductService implements OnModuleInit {
     }
   }
 
+  // DO'KON FILTRI UCHUN — FAQAT HAQIQATDA ISHLATILGAN RANGLAR.
+  //
+  // Avval filtr yonida tayyor ranglar ro'yxatining HAMMASI (30 ta)
+  // ko'rinardi: xaridor "moviy" ni bossa ham, hech bir tovar chiqmasdi.
+  // Bu yerda faol tovarlarda kiritilgan ranglar yig'iladi.
+  //
+  // `colors` ustuni bazada JSON matn ko'rinishida saqlanadi (SQLite'da
+  // massiv turi yo'q), shuning uchun SQL darajasida DISTINCT qilib
+  // bo'lmaydi — ro'yxat shu yerda ochib chiqiladi va takrorlar olib
+  // tashlanadi. Faqat `colors` ustuni o'qiladi, ya'ni so'rov yengil.
+  //
+  // Takrorlarni solishtirishda katta-kichik harf va apostrof turlari
+  // e'tiborga olinmaydi ("Ko'k" va "ko‘k" — bitta rang), lekin ro'yxatga
+  // admin kiritgan birinchi yozilish ko'rinishi tushadi.
+  async usedColors(): Promise<string[]> {
+    const rows = await this.prisma.product.findMany({
+      where: { isActive: true },
+      select: { colors: true },
+    });
+
+    const seen = new Map<string, string>();
+    for (const row of rows) {
+      for (const raw of this.parseArray(row.colors)) {
+        const name = String(raw ?? '').trim();
+        if (!name) continue;
+        const key = name.toLowerCase().replace(/['\u2019`\u02bb]/g, '').replace(/\s+/g, ' ');
+        if (!seen.has(key)) seen.set(key, name);
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  }
+
   private parseColorImages(value: unknown): { color: string; images: string[] }[] {
     if (Array.isArray(value)) return value as { color: string; images: string[] }[];
     if (typeof value !== 'string') return [];
