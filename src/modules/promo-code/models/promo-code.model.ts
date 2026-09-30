@@ -35,10 +35,14 @@ export class PromoCode {
   @Field(() => Float, { nullable: true })
   minOrderAmount?: number | null;
 
-  @Field({ nullable: true })
+  // TUR ANIQ YOZILISHI SHART: `Date | null` birikma turi bo'lgani uchun
+  // TypeScript metama'lumotga `Object` deb yozib qo'yadi va NestJS
+  // GraphQL turini o'zi aniqlay olmaydi ("Undefined type error").
+  // Shuning uchun `() => Date` ataylab qo'lda ko'rsatilgan.
+  @Field(() => Date, { nullable: true })
   startsAt?: Date | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   endsAt?: Date | null;
 
   @Field()
