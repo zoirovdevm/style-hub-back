@@ -30,6 +30,8 @@ import { StoreModule } from './modules/store/store.module';
 import { StockBotModule } from './modules/stock-bot/stock-bot.module';
 import { BannerModule } from './modules/banner/banner.module';
 import { PromoCodeModule } from './modules/promo-code/promo-code.module';
+// Wardrobe Ombor Telegram Mini App'ning REST API'si (/ombor-api/*).
+import { OmborModule } from './modules/ombor/ombor.module';
 
 @Module({
   imports: [
@@ -86,6 +88,7 @@ import { PromoCodeModule } from './modules/promo-code/promo-code.module';
     // bo'limi) — modules/banner/.
     BannerModule,
     PromoCodeModule,
+    OmborModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
