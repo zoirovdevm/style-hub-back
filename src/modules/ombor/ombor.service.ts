@@ -35,7 +35,7 @@ export interface SessionResult {
   user: { id: string; firstName: string | null; username: string | null };
 }
 
-interface DeductResult {
+export interface DeductResult {
   productId: string;
   productTitle: string;
   variantLabel: string | null;
