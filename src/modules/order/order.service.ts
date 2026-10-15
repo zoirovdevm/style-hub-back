@@ -199,6 +199,7 @@ export class OrderService {
         pricedItems.map(({ item, unitPrice }) => ({
           productId: item.productId,
           categoryId: item.product.categoryId,
+          storeId: item.product.storeId ?? null,
           unitPrice,
           quantity: item.quantity,
         })),

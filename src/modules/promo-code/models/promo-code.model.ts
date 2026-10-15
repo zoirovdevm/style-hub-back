@@ -48,7 +48,7 @@ export class PromoCode {
   @Field()
   isActive: boolean;
 
-  // "ALL" | "CATEGORIES" | "PRODUCTS"
+  // "ALL" | "CATEGORIES" | "PRODUCTS" | "STORES"
   @Field()
   scope: string;
 
@@ -60,6 +60,9 @@ export class PromoCode {
 
   @Field(() => [PromoScopeRef])
   products: PromoScopeRef[];
+
+  @Field(() => [PromoScopeRef])
+  stores: PromoScopeRef[];
 
   @Field()
   createdAt: Date;

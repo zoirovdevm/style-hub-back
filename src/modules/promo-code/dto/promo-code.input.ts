@@ -17,7 +17,8 @@ export const PROMO_DISCOUNT_TYPES = ['PERCENT', 'AMOUNT'] as const;
 // "ALL"        — hamma tovarga amal qiladi.
 // "CATEGORIES" — faqat tanlangan kategoriyalarga (masalan Krossovkalar).
 // "PRODUCTS"   — faqat tanlangan aniq tovarlarga.
-export const PROMO_SCOPES = ['ALL', 'CATEGORIES', 'PRODUCTS'] as const;
+// "STORES"     — tanlangan magazinlarning hamma tovarlariga.
+export const PROMO_SCOPES = ['ALL', 'CATEGORIES', 'PRODUCTS', 'STORES'] as const;
 
 @InputType()
 export class CreatePromoCodeInput {
@@ -81,6 +82,12 @@ export class CreatePromoCodeInput {
   @IsArray()
   @IsString({ each: true })
   productIds?: string[];
+
+  @Field(() => [ID], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  storeIds?: string[];
 }
 
 @InputType()

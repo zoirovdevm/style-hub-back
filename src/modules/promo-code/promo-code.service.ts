@@ -8,12 +8,15 @@ import { resolveUnitPrice } from '../../common/utils/variant-price.util';
 const PROMO_INCLUDE = {
   categories: { include: { category: { select: { id: true, name: true } } } },
   products: { include: { product: { select: { id: true, title: true } } } },
+  stores: { include: { store: { select: { id: true, name: true } } } },
 } as const;
 
 // Xaridor kiritadigan bitta tovar qatori (narxi bilan).
 export interface PricedItem {
   productId: string;
   categoryId: string;
+  // Tovar qaysi magazinniki (scope = "STORES" uchun). Magazinsiz tovar — null.
+  storeId: string | null;
   unitPrice: number;
   quantity: number;
 }
@@ -68,6 +71,10 @@ export class PromoCodeService {
         .map((row: any) => row.product)
         .filter(Boolean)
         .map((p: any) => ({ id: p.id, name: p.title })),
+      stores: (promo.stores ?? [])
+        .map((row: any) => row.store)
+        .filter(Boolean)
+        .map((st: any) => ({ id: st.id, name: st.name })),
       createdAt: promo.createdAt,
       updatedAt: promo.updatedAt,
     };
@@ -92,19 +99,31 @@ export class PromoCodeService {
   // tanlansa, avval qo'yilgan kategoriya/tovar ro'yxatlari o'chiriladi —
   // aks holda bazada ikkala ma'lumot qolib, keyin qaysi biri ishlashi
   // noaniq bo'lardi.
-  private normalizeScope(input: { scope?: string; categoryIds?: string[] | null; productIds?: string[] | null }) {
+  private normalizeScope(input: {
+    scope?: string;
+    categoryIds?: string[] | null;
+    productIds?: string[] | null;
+    storeIds?: string[] | null;
+  }) {
     const scope = input.scope ?? 'ALL';
+    const none = [] as string[];
+    const uniq = (ids?: string[] | null) => Array.from(new Set((ids ?? []).filter(Boolean)));
     if (scope === 'CATEGORIES') {
-      const ids = Array.from(new Set((input.categoryIds ?? []).filter(Boolean)));
+      const ids = uniq(input.categoryIds);
       if (ids.length === 0) throw new BadRequestException('Kamida bitta kategoriyani tanlang');
-      return { scope, categoryIds: ids, productIds: [] as string[] };
+      return { scope, categoryIds: ids, productIds: none, storeIds: none };
     }
     if (scope === 'PRODUCTS') {
-      const ids = Array.from(new Set((input.productIds ?? []).filter(Boolean)));
+      const ids = uniq(input.productIds);
       if (ids.length === 0) throw new BadRequestException('Kamida bitta mahsulotni tanlang');
-      return { scope, categoryIds: [] as string[], productIds: ids };
+      return { scope, categoryIds: none, productIds: ids, storeIds: none };
     }
-    return { scope: 'ALL', categoryIds: [] as string[], productIds: [] as string[] };
+    if (scope === 'STORES') {
+      const ids = uniq(input.storeIds);
+      if (ids.length === 0) throw new BadRequestException('Kamida bitta magazinni tanlang');
+      return { scope, categoryIds: none, productIds: none, storeIds: ids };
+    }
+    return { scope: 'ALL', categoryIds: none, productIds: none, storeIds: none };
   }
 
   async create(input: CreatePromoCodeInput) {
@@ -112,7 +131,7 @@ export class PromoCodeService {
     const exists = await this.prisma.promoCode.findUnique({ where: { code } });
     if (exists) throw new BadRequestException('Bunday promokod allaqachon mavjud');
 
-    const { scope, categoryIds, productIds } = this.normalizeScope(input);
+    const { scope, categoryIds, productIds, storeIds } = this.normalizeScope(input);
 
     const created = await this.prisma.promoCode.create({
       data: {
@@ -127,6 +146,7 @@ export class PromoCodeService {
         scope,
         categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
         products: { create: productIds.map((productId) => ({ productId })) },
+        stores: { create: storeIds.map((storeId) => ({ storeId })) },
       },
       include: PROMO_INCLUDE,
     });
@@ -143,7 +163,7 @@ export class PromoCodeService {
     const existing: any = await this.findById(id);
 
     // Yuborilmagan maydonlar bazadagicha qoladi.
-    const { scope, categoryIds, productIds } = this.normalizeScope({
+    const { scope, categoryIds, productIds, storeIds } = this.normalizeScope({
       scope: input.scope ?? existing.scope,
       categoryIds:
         input.categoryIds !== undefined
@@ -153,6 +173,10 @@ export class PromoCodeService {
         input.productIds !== undefined
           ? input.productIds
           : (existing.products ?? []).map((row: any) => row.productId),
+      storeIds:
+        input.storeIds !== undefined
+          ? input.storeIds
+          : (existing.stores ?? []).map((row: any) => row.storeId),
     });
 
     const code = input.code !== undefined ? input.code.trim().toUpperCase() : undefined;
@@ -179,6 +203,7 @@ export class PromoCodeService {
         // qidirishdan ko'ra sodda va xatosiz.
         categories: { deleteMany: {}, create: categoryIds.map((categoryId) => ({ categoryId })) },
         products: { deleteMany: {}, create: productIds.map((productId) => ({ productId })) },
+        stores: { deleteMany: {}, create: storeIds.map((storeId) => ({ storeId })) },
       },
       include: PROMO_INCLUDE,
     });
@@ -210,6 +235,7 @@ export class PromoCodeService {
         {
           productId: product.id,
           categoryId: product.categoryId,
+          storeId: product.storeId ?? null,
           unitPrice: resolveUnitPrice(product, input.buyNowSize ?? null, input.buyNowColor ?? null),
           quantity: input.buyNowQuantity ?? 1,
         },
@@ -225,6 +251,7 @@ export class PromoCodeService {
     return rows.map((row) => ({
       productId: row.productId,
       categoryId: row.product.categoryId,
+      storeId: row.product.storeId ?? null,
       unitPrice: resolveUnitPrice(row.product, row.size, row.color),
       quantity: row.quantity,
     }));
@@ -272,12 +299,14 @@ export class PromoCodeService {
       return fail('Buyurtma summasi promokod uchun yetarli emas');
     }
 
-    // Qamrov: kod faqat tanlangan kategoriya/tovarlarga tushadi.
+    // Qamrov: kod faqat tanlangan kategoriya/tovar/magazinlarga tushadi.
     const categoryIds = new Set((promo.categories ?? []).map((row: any) => row.categoryId));
     const productIds = new Set((promo.products ?? []).map((row: any) => row.productId));
+    const storeIds = new Set((promo.stores ?? []).map((row: any) => row.storeId));
     const eligible = items.filter((item) => {
       if (promo.scope === 'CATEGORIES') return categoryIds.has(item.categoryId);
       if (promo.scope === 'PRODUCTS') return productIds.has(item.productId);
+      if (promo.scope === 'STORES') return !!item.storeId && storeIds.has(item.storeId);
       return true;
     });
     const eligibleAmount = eligible.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);

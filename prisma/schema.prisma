@@ -218,7 +218,7 @@ model PromoCode {
   startsAt DateTime?
   endsAt   DateTime?
   isActive Boolean @default(true)
-  // "ALL" | "CATEGORIES" | "PRODUCTS"
+  // "ALL" | "CATEGORIES" | "PRODUCTS" | "STORES"
   scope String @default("ALL")
   // Nechta marta ishlatilgani (hisobot uchun; cheklov emas).
   usedCount Int @default(0)
@@ -227,6 +227,7 @@ model PromoCode {
 
   categories PromoCodeCategory[]
   products   PromoCodeProduct[]
+  stores     PromoCodeStore[]
   usages     PromoCodeUsage[]
 
   @@index([isActive])
@@ -259,6 +260,22 @@ model PromoCodeProduct {
   @@unique([promoCodeId, productId])
   @@index([promoCodeId])
   @@map("promo_code_products")
+}
+
+// scope = "STORES": kod tanlangan MAGAZINLARNING hamma tovarlariga amal
+// qiladi — keyinchalik o'sha magazinga qo'shiladigan tovarlarga ham.
+model PromoCodeStore {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  storeId String
+  store   Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, storeId])
+  @@index([promoCodeId])
+  @@map("promo_code_stores")
 }
 
 // "Bitta raqam — bitta marta" qoidasi aynan shu jadval orqali ishlaydi.
@@ -324,6 +341,7 @@ model Store {
   products      Product[]
   deductions    StockDeduction[]
   telegramLinks TelegramStoreLink[]
+  promoCodes    PromoCodeStore[]
 
   @@map("stores")
 }
