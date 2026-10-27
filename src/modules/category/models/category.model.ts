@@ -20,6 +20,11 @@ export class Category {
   @Field({ nullable: true })
   image?: string;
 
+  // null — avtomatik (frontend nomiga qarab tanlaydi), [] — o'lchamsiz.
+  // Bazada JSON matn; ro'yxatga CategoryResolver.sizeOptions o'giradi.
+  @Field(() => [String], { nullable: true })
+  sizeOptions?: string[] | null;
+
   @Field()
   isActive: boolean;
 

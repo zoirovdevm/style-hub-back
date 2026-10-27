@@ -1,5 +1,5 @@
 import { InputType, Field, PartialType } from '@nestjs/graphql';
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 @InputType()
 export class CreateCategoryInput {
@@ -22,6 +22,16 @@ export class CreateCategoryInput {
   @IsOptional()
   @IsString()
   image?: string;
+
+  // O'lchamlar ro'yxati. Yuborilmasa — o'zgarmaydi; null — avtomatik
+  // (nomiga qarab); [] — o'lchamsiz; ["1","2",…] — aynan shu ro'yxat.
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(80)
+  @IsString({ each: true })
+  @MaxLength(20, { each: true })
+  sizeOptions?: string[] | null;
 }
 
 @InputType()

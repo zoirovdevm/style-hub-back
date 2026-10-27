@@ -1,7 +1,7 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, ID, ResolveField, Parent } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { Category } from './models/category.model';
-import { CategoryService } from './category.service';
+import { CategoryService, parseSizeOptions } from './category.service';
 import { CreateCategoryInput, UpdateCategoryInput } from './dto/category.input';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -12,6 +12,15 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 @Resolver(() => Category)
 export class CategoryResolver {
   constructor(private readonly categoryService: CategoryService) {}
+
+  // Bazada JSON matn turadi — GraphQL'ga ro'yxat bo'lib chiqadi. Category
+  // qayerda qaytmasin (masalan Product.category ichida ham) shu ishlaydi.
+  @ResolveField(() => [String], { nullable: true })
+  sizeOptions(@Parent() category: { sizeOptions?: string | string[] | null }) {
+    const raw = category.sizeOptions;
+    if (Array.isArray(raw)) return raw;
+    return parseSizeOptions(raw ?? null);
+  }
 
   @Public()
   @Query(() => [Category])

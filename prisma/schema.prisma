@@ -110,6 +110,12 @@ model Category {
   slug        String   @unique
   description String?
   image       String?
+  // Shu kategoriya tovarlari uchun o'lchamlar ro'yxati — JSON matn,
+  // masalan '["1","2","3","4","5","6","7"]' (myach) yoki '["36",…,"45"]'.
+  //   null  → avtomatik (nomiga qarab: kiyim XS–XXXL, poyabzal 35–45 …)
+  //   "[]"  → o'lchamsiz kategoriya
+  // Admin panelning "Kategoriyalar" sahifasidan belgilanadi.
+  sizeOptions String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
